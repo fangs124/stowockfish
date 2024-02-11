@@ -1,0 +1,5 @@
+struct_field_align_threshold = 16
+fn_args_layout = "Compressed"
+array_width = 80
+indent_style = Visual
+use_small_heuristics = "Max"
