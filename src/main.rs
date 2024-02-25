@@ -2,11 +2,18 @@
 mod bitboard;
 mod chessboard;
 use crate::bitboard::*;
+use crate::chessboard::*;
+use crate::chessmove::*;
 use rand::Rng;
 
 fn main() {
     println!("Hello, world!");
+    let chessboard = CB::default();
+    ChessBoard::from_fen(test_fen);
+    println!("{}\n", chessboard);
+    println!("{:#?}\n", chessboard);
 }
+const test_fen: &str  = "rnbqkb1r/pp1p1pPp/8/2p1pP2/1P1P4/3P3P/P1P1P3/RNBQKBNR w KQkq e6 0 1";
 
 #[cfg(test)]
 mod test {

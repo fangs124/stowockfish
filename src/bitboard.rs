@@ -1,11 +1,13 @@
 #![allow(dead_code)]
 #![allow(long_running_const_eval)]
+
 use bitintr::Pdep;
 use rand::Rng;
 use std::fmt::Display;
 use std::ops::{BitAnd, BitOr, BitXor, Not};
+
 /* general bitboard functions and definitions */
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct BitBoard {
     pub data: u64,
 }
@@ -124,6 +126,7 @@ pub const W_PAWN_ATTACKS: [BB; 64] = init_pawn_attack(_Side::White);
 pub const B_PAWN_ATTACKS: [BB; 64] = init_pawn_attack(_Side::Black);
 pub const KNIGHT_ATTACKS: [BB; 64] = init_knight_attack();
 pub const KING_ATTACKS: [BB; 64] = init_king_attack();
+//pub const OMNI_ATTACKS: [BB; 64] = init_omni_attack();
 
 #[derive(Debug, PartialEq, Eq)]
 enum _Side {
@@ -237,6 +240,16 @@ const fn init_king_attack() -> [BB; 64] {
             data |= (1u64 << i) >> 1
         }
         attack_array[i] = BB { data };
+        i += 1;
+    }
+    return attack_array;
+}
+
+const fn init_omni_attack() -> [BB; 64] {
+    let mut i: usize = 0;
+    let mut attack_array: [BB; 64] = [BB::ZERO; 64];
+    while i < 64usize {
+        attack_array[i].data = get_queen_attack(i, BB::ZERO).data | KNIGHT_ATTACKS[i].data; 
         i += 1;
     }
     return attack_array;
@@ -404,7 +417,7 @@ pub const BISHOP_ATTACKS_MBB: [[BB; 1 << 9]; 64] = init_bishop_attack_mbb();
 pub const ROOK_ATTACKS_MBB: [[BB; 1 << 12]; 64] = init_rook_attack_mbb();
 
 // naive function to calculate bishop attack patterns
-pub const fn naive_bishop_attack(i: usize, blocker: BB) -> BB {
+pub const fn naive_bishop_attack(i: usize, blockers: BB) -> BB {
     let i_rank: isize = (i as isize) / 8isize;
     let i_file: isize = (i as isize) % 8isize;
     let mut j: isize = 1;
@@ -419,7 +432,7 @@ pub const fn naive_bishop_attack(i: usize, blocker: BB) -> BB {
             if !ul_is_blocked {
                 data |= 1u64 << (i_rank + j) * 8 + (i_file + j);
                 if i_rank + j < 7 && i_file + j < 7 {
-                    if 1u64 << (i_rank + j) * 8 + (i_file + j) & blocker.data != BB::ZERO.data {
+                    if 1u64 << (i_rank + j) * 8 + (i_file + j) & blockers.data != BB::ZERO.data {
                         ul_is_blocked = true;
                     }
                 }
@@ -431,7 +444,7 @@ pub const fn naive_bishop_attack(i: usize, blocker: BB) -> BB {
             if !dl_is_blocked {
                 data |= 1u64 << (i_rank - j) * 8 + (i_file + j);
                 if 0 < i_rank - j && i_file + j < 7 {
-                    if 1u64 << (i_rank - j) * 8 + (i_file + j) & blocker.data != BB::ZERO.data {
+                    if 1u64 << (i_rank - j) * 8 + (i_file + j) & blockers.data != BB::ZERO.data {
                         dl_is_blocked = true;
                     }
                 }
@@ -443,7 +456,7 @@ pub const fn naive_bishop_attack(i: usize, blocker: BB) -> BB {
             if !ur_is_blocked {
                 data |= 1u64 << (i_rank + j) * 8 + (i_file - j);
                 if i_rank + j < 7 && 0 < i_file - j {
-                    if 1u64 << (i_rank + j) * 8 + (i_file - j) & blocker.data != BB::ZERO.data {
+                    if 1u64 << (i_rank + j) * 8 + (i_file - j) & blockers.data != BB::ZERO.data {
                         ur_is_blocked = true;
                     }
                 }
@@ -455,7 +468,7 @@ pub const fn naive_bishop_attack(i: usize, blocker: BB) -> BB {
             if !dr_is_blocked {
                 data |= 1u64 << (i_rank - j) * 8 + (i_file - j);
                 if 0 < i_rank - j && 0 < i_file - j {
-                    if 1u64 << (i_rank - j) * 8 + (i_file - j) & blocker.data != BB::ZERO.data {
+                    if 1u64 << (i_rank - j) * 8 + (i_file - j) & blockers.data != BB::ZERO.data {
                         dr_is_blocked = true;
                     }
                 }
@@ -467,7 +480,7 @@ pub const fn naive_bishop_attack(i: usize, blocker: BB) -> BB {
     BB { data }
 }
 
-pub const fn naive_rook_attack(i: usize, blocker: BB) -> BB {
+pub const fn naive_rook_attack(i: usize, blockers: BB) -> BB {
     let i_rank: isize = (i as isize) / 8isize; // row
     let i_file: isize = (i as isize) % 8isize; // collumn
     let mut data: u64 = 0u64;
@@ -484,7 +497,7 @@ pub const fn naive_rook_attack(i: usize, blocker: BB) -> BB {
             if !r_is_blocked {
                 data |= 1u64 << (i_rank * 8) + (i_file - j);
                 if 0 < i_file - j {
-                    if 1u64 << (i_rank * 8) + (i_file - j) & blocker.data != BB::ZERO.data {
+                    if 1u64 << (i_rank * 8) + (i_file - j) & blockers.data != BB::ZERO.data {
                         r_is_blocked = true;
                     }
                 }
@@ -495,7 +508,7 @@ pub const fn naive_rook_attack(i: usize, blocker: BB) -> BB {
             if !l_is_blocked {
                 data |= 1u64 << (i_rank * 8) + (i_file + j);
                 if i_file + j < 7 {
-                    if 1u64 << (i_rank * 8) + (i_file + j) & blocker.data != BB::ZERO.data {
+                    if 1u64 << (i_rank * 8) + (i_file + j) & blockers.data != BB::ZERO.data {
                         l_is_blocked = true;
                     }
                 }
@@ -506,7 +519,7 @@ pub const fn naive_rook_attack(i: usize, blocker: BB) -> BB {
             if !u_is_blocked {
                 data |= 1u64 << ((i_rank + j) * 8) + i_file;
                 if i_rank + j < 7 {
-                    if 1u64 << ((i_rank + j) * 8) + i_file & blocker.data != BB::ZERO.data {
+                    if 1u64 << ((i_rank + j) * 8) + i_file & blockers.data != BB::ZERO.data {
                         u_is_blocked = true;
                     }
                 }
@@ -517,7 +530,7 @@ pub const fn naive_rook_attack(i: usize, blocker: BB) -> BB {
             if !d_is_blocked {
                 data |= 1u64 << ((i_rank - j) * 8) + i_file;
                 if 0 < i_rank - j {
-                    if 1u64 << ((i_rank - j) * 8) + i_file & blocker.data != BB::ZERO.data {
+                    if 1u64 << ((i_rank - j) * 8) + i_file & blockers.data != BB::ZERO.data {
                         d_is_blocked = true;
                     }
                 }
@@ -528,8 +541,8 @@ pub const fn naive_rook_attack(i: usize, blocker: BB) -> BB {
     BB { data }
 }
 
-pub const fn magic_index(magic_num: u64, blocker: BB, bitcount: usize) -> usize {
-    ((blocker.data.wrapping_mul(magic_num)) >> (64 - bitcount)) as usize
+pub const fn magic_index(magic_num: u64, blockers: BB, bitcount: usize) -> usize {
+    ((blockers.data.wrapping_mul(magic_num)) >> (64 - bitcount)) as usize
 }
 
 fn find_magic_number(square: usize, mask_bitcount: usize, piece_type: PieceT) -> u64 {
@@ -734,12 +747,12 @@ const fn init_bishop_attack_mbb() -> [[BB; 1 << 9]; 64] {
 
         let mut j: usize = 0;
         while j < max_index {
-            let blocker = compute_occ_bb(j, bitcount, mask);
-            let m = magic_index(BISHOP_MAGICS[i], blocker, bitcount);
+            let blockers = compute_occ_bb(j, bitcount, mask);
+            let m = magic_index(BISHOP_MAGICS[i], blockers, bitcount);
 
             if attacks[i][m].data == BB::ZERO.data {
-                attacks[i][m] = naive_bishop_attack(i, blocker);
-            } else if attacks[i][m].data != naive_bishop_attack(i, blocker).data {
+                attacks[i][m] = naive_bishop_attack(i, blockers);
+            } else if attacks[i][m].data != naive_bishop_attack(i, blockers).data {
                 panic!("init_bishop_attack_mbb error: invalid colision!");
             }
             j += 1;
@@ -759,12 +772,12 @@ const fn init_rook_attack_mbb() -> [[BB; 1 << 12]; 64] {
 
         let mut j: usize = 0;
         while j < max_index {
-            let blocker = compute_occ_bb(j, bitcount, mask);
-            let m = magic_index(ROOK_MAGICS[i], blocker, bitcount);
+            let blockers = compute_occ_bb(j, bitcount, mask);
+            let m = magic_index(ROOK_MAGICS[i], blockers, bitcount);
 
             if attacks[i][m].data == BB::ZERO.data {
-                attacks[i][m] = naive_rook_attack(i, blocker);
-            } else if attacks[i][m].data != naive_rook_attack(i, blocker).data {
+                attacks[i][m] = naive_rook_attack(i, blockers);
+            } else if attacks[i][m].data != naive_rook_attack(i, blockers).data {
                 panic!("init_rook_attack_mbb error: invalid colision!");
             }
             j += 1;
@@ -774,20 +787,26 @@ const fn init_rook_attack_mbb() -> [[BB; 1 << 12]; 64] {
     return attacks;
 }
 
-#[inline(always)]
-const fn get_bishop_attack(square: usize, blocker: BB) -> BB {
+//#[inline(always)]
+pub const fn get_bishop_attack(square: usize, blockers: BB) -> BB {
     let mask = BISHOP_MBB_MASK[square];
-    let data = blocker.data & mask.data;
-    let blocker = BB { data };
-    let m = magic_index(BISHOP_MAGICS[square], blocker, BISHOP_OCC_BITCOUNT[square]);
+    let data = blockers.data & mask.data;
+    let blockers = BB { data };
+    let m = magic_index(BISHOP_MAGICS[square], blockers, BISHOP_OCC_BITCOUNT[square]);
     return BISHOP_ATTACKS_MBB[square][m];
 }
 
-#[inline(always)]
-const fn get_rook_attack(square: usize, blocker: BB) -> BB {
+//#[inline(always)]
+pub const fn get_rook_attack(square: usize, blockers: BB) -> BB {
     let mask = ROOK_MBB_MASK[square];
-    let data = blocker.data & mask.data;
-    let blocker = BB { data };
-    let m = magic_index(ROOK_MAGICS[square], blocker, ROOK_OCC_BITCOUNT[square]);
+    let data = blockers.data & mask.data;
+    let blockers = BB { data };
+    let m = magic_index(ROOK_MAGICS[square], blockers, ROOK_OCC_BITCOUNT[square]);
     return ROOK_ATTACKS_MBB[square][m];
 }
+
+//#[inline(always)]
+pub const fn get_queen_attack(square: usize, blockers: BB) -> BB {
+    BB { data: get_bishop_attack(square, blockers).data | get_rook_attack(square, blockers).data }
+}
+
