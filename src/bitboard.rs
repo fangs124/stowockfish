@@ -75,6 +75,28 @@ impl Not for BitBoard {
    -----------------------
     A  B  C  D  E  F  G  H */
 
+pub const SQUARE_SYM_REV: [&str; 64] = [
+    "a8", "b8", "c8", "d8", "e8", "f8", "g8", "h8", //
+    "a7", "b7", "c7", "d7", "e7", "f7", "g7", "h7", //
+    "a6", "b6", "c6", "d6", "e6", "f6", "g6", "h6", //
+    "a5", "b5", "c5", "d5", "e5", "f5", "g5", "h5", //
+    "a4", "b4", "c4", "d4", "e4", "f4", "g4", "h4", //
+    "a3", "b3", "c3", "d3", "e3", "f3", "g3", "h3", //
+    "a2", "b2", "c2", "d2", "e2", "f2", "g2", "h2", //
+    "a1", "b1", "c1", "d1", "e1", "f1", "g1", "h1", //
+];
+
+pub const SQUARE_SYM: [&str; 64] = [
+    "h1", "g1", "f1", "e1", "d1", "c1", "b1", "a1", //
+    "h2", "g2", "f2", "e2", "d2", "c2", "b2", "a2", //
+    "h3", "g3", "f3", "e3", "d3", "c3", "b3", "a3", //
+    "h4", "g4", "f4", "e4", "d4", "c4", "b4", "a4", //
+    "h5", "g5", "f5", "e5", "d5", "c5", "b5", "a5", //
+    "h6", "g6", "f6", "e6", "d6", "c6", "b6", "a6", //
+    "h7", "g7", "f7", "e7", "d7", "c7", "b7", "a7", //
+    "h8", "g8", "f8", "e8", "d8", "c8", "b8", "a8", //
+];
+
 /* some u64 bit manipulation support */
 impl BitBoard {
     pub const ZERO: BB = BB { data: 0u64 };
@@ -83,7 +105,7 @@ impl BitBoard {
         Self { data: 1u64 << n }
     }
 
-    pub const fn lsb_index(self) -> Option<usize> {
+    pub const fn lsb_index(&self) -> Option<usize> {
         if self.data == 0u64 {
             return None;
         } else {
@@ -95,25 +117,26 @@ impl BitBoard {
         self.data = self.data | 1u64 << i;
     }
 
-    pub const fn get_bit(self, i: usize) -> BB {
+    pub const fn get_bit(&self, i: usize) -> BB {
         BB {
-            data: self.data & 1u64 << i,
+            data: self.data & (1u64 << i),
         }
     }
 
-    pub const fn pop_bit(self, i: usize) -> BB {
+    pub const fn pop_bit(&self, i: usize) -> BB {
         BB {
             data: match self.get_bit(i).data {
                 0u64 => 0,
-                _ => self.data ^ 1u64 << i,
+                //_ => self.data ^ (1u64 << i), //old line, idk how it works
+                _ => self.data & !(1u64 << i),
             },
         }
     }
 }
 
 /* chessboard specific bitboard functions and definitions*/
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub enum PieceT {
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum PieceType {
     Pawn,
     Knight,
     Bishop,
@@ -121,26 +144,49 @@ pub enum PieceT {
     Queen,
     King,
 }
+pub type PT = PieceType;
 
-pub const W_PAWN_ATTACKS: [BB; 64] = init_pawn_attack(_Side::White);
-pub const B_PAWN_ATTACKS: [BB; 64] = init_pawn_attack(_Side::Black);
+impl PieceType {
+    pub fn to_char(&self) -> char {
+        match self {
+            PieceType::Pawn => 'p',
+            PieceType::Knight => 'n',
+            PieceType::Bishop => 'b',
+            PieceType::Rook => 'r',
+            PieceType::Queen => 'q',
+            PieceType::King => 'k',
+        }
+    }
+}
+
+pub const W_PAWN_ATTACKS: [BB; 64] = init_pawn_attack(Side::White);
+pub const B_PAWN_ATTACKS: [BB; 64] = init_pawn_attack(Side::Black);
 pub const KNIGHT_ATTACKS: [BB; 64] = init_knight_attack();
 pub const KING_ATTACKS: [BB; 64] = init_king_attack();
 //pub const OMNI_ATTACKS: [BB; 64] = init_omni_attack();
 
-#[derive(Debug, PartialEq, Eq)]
-enum _Side {
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum Side {
     White,
     Black,
 }
 
-const fn init_pawn_attack(side: _Side) -> [BB; 64] {
+impl Side {
+    pub const fn update(&self) -> Side {
+        match self {
+            Side::White => Side::Black,
+            Side::Black => Side::White,
+        }
+    }
+}
+
+const fn init_pawn_attack(side: Side) -> [BB; 64] {
     let mut i: usize = 0;
     let mut attack_array: [BB; 64] = [BB::ZERO; 64];
     while i < 64usize {
         let mut data: u64 = 0u64;
         match side {
-            _Side::White => {
+            Side::White => {
                 if i < 56 {
                     if i % 8 > 0 {
                         data |= (1u64 << i) << 7
@@ -150,7 +196,7 @@ const fn init_pawn_attack(side: _Side) -> [BB; 64] {
                     }
                 }
             }
-            _Side::Black => {
+            Side::Black => {
                 if i > 7 {
                     if i % 8 > 0 {
                         data |= (1u64 << i) >> 9
@@ -225,19 +271,35 @@ const fn init_king_attack() -> [BB; 64] {
         let mut data: u64 = 0u64;
         if i < 56 {
             //up
-            data |= (1u64 << i) << 8
+            data |= (1u64 << i) << 8;
         }
         if i > 7 {
             //down
-            data |= (1u64 << i) >> 8
-        }
-        if i % 8 < 7 {
-            //left
-            data |= (1u64 << i) << 1
+            data |= (1u64 << i) >> 8;
         }
         if i % 8 > 0 {
             //right
-            data |= (1u64 << i) >> 1
+            data |= (1u64 << i) >> 1;
+        }
+        if i % 8 < 7 {
+            //left
+            data |= (1u64 << i) << 1;
+        }
+        if i < 56 && i % 8 > 0 {
+            //up right
+            data |= ((1u64 << i) << 8) >> 1;
+        }
+        if i < 56 && 1 % 8 < 7 {
+            //up left
+            data |= ((1u64 << i) << 8) << 1;
+        }
+        if i > 7 && i % 8 > 0 {
+            //down right
+            data |= ((1u64 << i) >> 8) >> 1;
+        }
+        if i > 7 && i % 8 < 7 {
+            //down left
+            data |= ((1u64 << i) >> 8) << 1;
         }
         attack_array[i] = BB { data };
         i += 1;
@@ -249,7 +311,7 @@ const fn init_omni_attack() -> [BB; 64] {
     let mut i: usize = 0;
     let mut attack_array: [BB; 64] = [BB::ZERO; 64];
     while i < 64usize {
-        attack_array[i].data = get_queen_attack(i, BB::ZERO).data | KNIGHT_ATTACKS[i].data; 
+        attack_array[i].data = get_queen_attack(i, BB::ZERO).data | KNIGHT_ATTACKS[i].data;
         i += 1;
     }
     return attack_array;
@@ -545,15 +607,15 @@ pub const fn magic_index(magic_num: u64, blockers: BB, bitcount: usize) -> usize
     ((blockers.data.wrapping_mul(magic_num)) >> (64 - bitcount)) as usize
 }
 
-fn find_magic_number(square: usize, mask_bitcount: usize, piece_type: PieceT) -> u64 {
+fn find_magic_number(square: usize, mask_bitcount: usize, piece_type: PieceType) -> u64 {
     let max_index: usize = 1 << mask_bitcount;
     let mut rng = rand::thread_rng();
     let mut blockers: Vec<BB> = vec![BB::ZERO; max_index];
     let mut attacks: Vec<BB> = vec![BB::ZERO; max_index];
-    let mut attack_history: Vec<BB> = vec![BB::ZERO; max_index];
+    //let mut attack_history: Vec<BB> = vec![BB::ZERO; max_index];
     let mask = match piece_type {
-        PieceT::Bishop => BISHOP_MBB_MASK[square],
-        PieceT::Rook => ROOK_MBB_MASK[square],
+        PieceType::Bishop => BISHOP_MBB_MASK[square],
+        PieceType::Rook => ROOK_MBB_MASK[square],
         _ => panic!("find_magic_number error: invalid piece type!"),
     };
 
@@ -562,8 +624,8 @@ fn find_magic_number(square: usize, mask_bitcount: usize, piece_type: PieceT) ->
     while i < max_index {
         blockers[i] = compute_occ_bb(i, mask_bitcount, mask);
         attacks[i] = match piece_type {
-            PieceT::Bishop => naive_bishop_attack(square, blockers[i]),
-            PieceT::Rook => naive_rook_attack(square, blockers[i]),
+            PieceType::Bishop => naive_bishop_attack(square, blockers[i]),
+            PieceType::Rook => naive_rook_attack(square, blockers[i]),
             _ => panic!("find_magic_number error: invalid piece type!"),
         };
         i += 1;
@@ -579,14 +641,14 @@ fn find_magic_number(square: usize, mask_bitcount: usize, piece_type: PieceT) ->
             continue;
         }
 
-        attack_history = vec![BB::ZERO; max_index];
+        let mut attack_history = vec![BB::ZERO; max_index];
         let mut i: usize = 0;
         let mut is_failed = false;
 
         while !is_failed && i < max_index {
             let m = magic_index(magic_num, blockers[i], mask_bitcount);
 
-            if (attack_history[m] == BB::ZERO) {
+            if attack_history[m] == BB::ZERO {
                 attack_history[m] = attacks[i];
             } else {
                 is_failed = attack_history[m] != attacks[i];
@@ -627,14 +689,14 @@ pub const fn compute_occ_bb(index: usize, mask_bitcount: usize, attack_mask: BB)
     return occupancy_bb;
 }
 
-pub fn init_magics(piece_type: PieceT) -> [u64; 64] {
+pub fn init_magics(piece_type: PieceType) -> [u64; 64] {
     let mut i: usize = 0;
     let mut magic_nums: [u64; 64] = [0u64; 64];
     match piece_type {
-        PieceT::Bishop => {
+        PieceType::Bishop => {
             println!("Finding magic numbers for: Bishop")
         }
-        PieceT::Rook => {
+        PieceType::Rook => {
             println!("Finding magic numbers for: Rook")
         }
         _ => panic!("error: invalid piece_type parameter"),
@@ -646,9 +708,9 @@ pub fn init_magics(piece_type: PieceT) -> [u64; 64] {
         let mut magic: u64 = 0;
         while !magic_found {
             magic = match piece_type {
-                PieceT::Bishop => find_magic_number(i, BISHOP_OCC_BITCOUNT[i], piece_type),
-                PieceT::Rook => find_magic_number(i, ROOK_OCC_BITCOUNT[i], piece_type),
-                _ => panic!("init_magic_numbers error: invalid PieceT variable"),
+                PieceType::Bishop => find_magic_number(i, BISHOP_OCC_BITCOUNT[i], piece_type),
+                PieceType::Rook => find_magic_number(i, ROOK_OCC_BITCOUNT[i], piece_type),
+                _ => panic!("init_magic_numbers error: invalid PieceType variable"),
             };
             magic_found = true;
             for x in magic_nums {
@@ -807,6 +869,7 @@ pub const fn get_rook_attack(square: usize, blockers: BB) -> BB {
 
 //#[inline(always)]
 pub const fn get_queen_attack(square: usize, blockers: BB) -> BB {
-    BB { data: get_bishop_attack(square, blockers).data | get_rook_attack(square, blockers).data }
+    BB {
+        data: get_bishop_attack(square, blockers).data | get_rook_attack(square, blockers).data,
+    }
 }
-

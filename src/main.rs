@@ -1,20 +1,121 @@
 #![allow(dead_code)]
+#![allow(unused_imports)]
 mod bitboard;
 mod chessboard;
+mod chessmove;
+use std::time::Instant;
+
 use crate::bitboard::*;
 use crate::chessboard::*;
 use crate::chessmove::*;
 use rand::Rng;
 
 fn main() {
-    println!("Hello, world!");
-    let chessboard = CB::default();
-    ChessBoard::from_fen(test_fen);
-    println!("{}\n", chessboard);
-    println!("{:#?}\n", chessboard);
-}
-const test_fen: &str  = "rnbqkb1r/pp1p1pPp/8/2p1pP2/1P1P4/3P3P/P1P1P3/RNBQKBNR w KQkq e6 0 1";
+    for i in W_PAWN_ATTACKS {
+        //println!("{}", i);
+    }
 
+    /*
+    println!("Hello, world!");
+    let mut chessboard = CB::default();
+    let arr = chessboard.generate_moves_array();
+    println!("================================================================");
+    println!("{}", chessboard);
+    println!("{:?}\n", arr);
+
+    chessboard = chessboard.update_state(arr.data()[0].unwrap());
+    println!("================================================================");
+    println!("{}", chessboard);
+    let arr = chessboard.generate_moves_array();
+    println!("{:?}\n", arr);
+
+    chessboard = chessboard.update_state(arr.data()[0].unwrap());
+    println!("================================================================");
+    println!("{}", chessboard);
+    let arr = chessboard.generate_moves_array();
+    println!("{:?}\n", arr);
+
+    chessboard = chessboard.update_state(arr.data()[0].unwrap());
+    println!("================================================================");
+    println!("{}", chessboard);
+    let arr = chessboard.generate_moves_array();
+    println!("{:?}\n", arr);
+
+    chessboard = chessboard.update_state(arr.data()[0].unwrap());
+    println!("================================================================");
+    println!("{}", chessboard);
+    let arr = chessboard.generate_moves_array();
+    println!("{:?}\n", arr);
+    */
+    /* template
+    arr = chessboard.generate_moves_array();
+    arr.sort();
+    chessboard = chessboard.update_state(arr.data()[0].unwrap());
+    */
+    //let moves_indices: [usize; 12] = [8usize, 0, 6, 8, 18, 1, 1, 4, 0, 0,4, 15]; //series 1
+    let moves_indices: [usize; 0] = [];
+    let moves_indices = [6, 0, 6]; //series 2
+    let mut chessboard = CB::default();
+    //let mut chessboard = CB::from_fen(TEST_FEN2);
+    chessboard.generate_moves();
+    chessboard.moves_arr.sort();
+    for i in moves_indices {
+        chessboard = chessboard.update_state(chessboard.moves_arr.data()[i].unwrap());
+        chessboard.generate_moves();
+        chessboard.moves_arr.sort();
+    }
+    println!("{:?}", chessboard.moves_arr);
+    /*
+     */
+    println!("==== start position ====\n");
+    println!("{}", chessboard);
+    println!("========================");
+    println!("{}\n", chessboard.piece_bbs[5]);
+    println!("========================");
+    println!("{}\n", chessboard.piece_bbs[11]);
+    println!("========================");
+    println!("{:?}\n", chessboard.mailbox);
+    println!("========================");
+    let mut i: usize = 1;
+    let max_depth = 10;
+    while i < max_depth {
+        let now = Instant::now();
+        let total = chessboard.perft_count(i);
+        let elapsed = now.elapsed();
+        let mut arr = chessboard.generate_moves_array();
+        arr.sort();
+        //arr.sort();
+        let mut result_str_vec = Vec::<String>::new();
+        let mut j: usize = 0;
+        while j < arr.len() && arr.data()[j] != None {
+            let chess_move = arr.data()[j].unwrap();
+            let mut s = chess_move.print_move();
+            let state = chessboard.update_state(chess_move);
+            let subtotal = state.perft_count(i - 1);
+            s.push_str(format!(" - {}", subtotal).as_str());
+            //debug
+            //s.push_str(format!("\n  type: {:?}", chess_move.get_move_type()).as_str(),);
+            //s.push_str(format!("\n piece: {:?}", chessboard.mailbox[chess_move.source()]).as_str(),);
+            result_str_vec.push(s);
+            j += 1;
+        }
+        //result_str_vec.sort();
+        println!(
+            "depth: {}, time: {}ns, total: {}",
+            i,
+            elapsed.as_nanos(),
+            total
+        );
+        for x in result_str_vec {
+            println!("{}", x);
+        }
+        println!("\n");
+        i += 1
+    }
+}
+const TEST_FEN: &str = "rnbqkb1r/pp1p1pPp/8/2p1pP2/1P1P4/3P3P/P1P1P3/RNBQKBNR w KQkq e6 0 1";
+const TEST_FEN2: &str = "4k3/pppppppp/8/8/8/8/PPPPPPPP/4K3 w - - 0 1";
+/*
 #[cfg(test)]
 mod test {
     use super::*;
@@ -67,3 +168,4 @@ mod test {
         }
     }
 }
+*/

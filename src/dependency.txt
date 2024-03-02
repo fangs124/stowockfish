@@ -1,0 +1,4 @@
+bitboard -----------> chessboard
+    |                      ^
+    |                      |
+    --------> chessmoves ---
