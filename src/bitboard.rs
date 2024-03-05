@@ -18,10 +18,7 @@ impl Display for BitBoard {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut s = String::new();
         for i in 0..8u64 {
-            s.push_str(&format!(
-                "{:08b}",
-                (self.data & (0xFFu64 << 8 * (7 - i))) >> 8 * (7 - i)
-            ));
+            s.push_str(&format!("{:08b}", (self.data & (0xFFu64 << 8 * (7 - i))) >> 8 * (7 - i)));
             s.push('\n');
         }
         write!(f, "{}", s)
@@ -31,27 +28,21 @@ impl Display for BitBoard {
 impl BitAnd for BitBoard {
     type Output = BitBoard;
     fn bitand(self, rhs: BitBoard) -> Self::Output {
-        BitBoard {
-            data: self.data & rhs.data,
-        }
+        BitBoard { data: self.data & rhs.data }
     }
 }
 
 impl BitOr for BitBoard {
     type Output = BitBoard;
     fn bitor(self, rhs: BitBoard) -> Self::Output {
-        BitBoard {
-            data: self.data | rhs.data,
-        }
+        BitBoard { data: self.data | rhs.data }
     }
 }
 
 impl BitXor for BitBoard {
     type Output = BitBoard;
     fn bitxor(self, rhs: BitBoard) -> Self::Output {
-        BitBoard {
-            data: self.data ^ rhs.data,
-        }
+        BitBoard { data: self.data ^ rhs.data }
     }
 }
 
@@ -97,6 +88,92 @@ pub const SQUARE_SYM: [&str; 64] = [
     "h8", "g8", "f8", "e8", "d8", "c8", "b8", "a8", //
 ];
 
+pub const RANK_CHAR: [char; 64] = [
+    '1', '1', '1', '1', '1', '1', '1', '1', //
+    '2', '2', '2', '2', '2', '2', '2', '2', //
+    '3', '3', '3', '3', '3', '3', '3', '3', //
+    '4', '4', '4', '4', '4', '4', '4', '4', //
+    '5', '5', '5', '5', '5', '5', '5', '5', //
+    '6', '6', '6', '6', '6', '6', '6', '6', //
+    '7', '7', '7', '7', '7', '7', '7', '7', //
+    '8', '8', '8', '8', '8', '8', '8', '8', //
+];
+
+pub const FILE_CHAR: [char; 64] = [
+    'h', 'g', 'f', 'e', 'd', 'c', 'b', 'a', //
+    'h', 'g', 'f', 'e', 'd', 'c', 'b', 'a', //
+    'h', 'g', 'f', 'e', 'd', 'c', 'b', 'a', //
+    'h', 'g', 'f', 'e', 'd', 'c', 'b', 'a', //
+    'h', 'g', 'f', 'e', 'd', 'c', 'b', 'a', //
+    'h', 'g', 'f', 'e', 'd', 'c', 'b', 'a', //
+    'h', 'g', 'f', 'e', 'd', 'c', 'b', 'a', //
+    'h', 'g', 'f', 'e', 'd', 'c', 'b', 'a', //
+];
+pub const ROWS: [usize; 64] = [
+    0, 0, 0, 0, 0, 0, 0, 0, //
+    1, 1, 1, 1, 1, 1, 1, 1, //
+    2, 2, 2, 2, 2, 2, 2, 2, //
+    3, 3, 3, 3, 3, 3, 3, 3, //
+    4, 4, 4, 4, 4, 4, 4, 4, //
+    5, 5, 5, 5, 5, 5, 5, 5, //
+    6, 6, 6, 6, 6, 6, 6, 6, //
+    7, 7, 7, 7, 7, 7, 7, 7, //
+];
+pub const COLS: [usize; 64] = [
+    0, 1, 2, 3, 4, 5, 6, 7, //
+    0, 1, 2, 3, 4, 5, 6, 7, //
+    0, 1, 2, 3, 4, 5, 6, 7, //
+    0, 1, 2, 3, 4, 5, 6, 7, //
+    0, 1, 2, 3, 4, 5, 6, 7, //
+    0, 1, 2, 3, 4, 5, 6, 7, //
+    0, 1, 2, 3, 4, 5, 6, 7, //
+    0, 1, 2, 3, 4, 5, 6, 7, //
+];
+pub const DDIAG: [usize; 64] = [
+    07, 08, 09, 10, 11, 12, 13, 14, //
+    06, 07, 08, 09, 10, 11, 12, 13, //
+    05, 06, 07, 08, 09, 10, 11, 12, //
+    04, 05, 06, 07, 08, 09, 10, 11, //
+    03, 04, 05, 06, 07, 08, 09, 10, //
+    02, 03, 04, 05, 06, 07, 08, 09, //
+    01, 02, 03, 04, 05, 06, 07, 08, //
+    00, 01, 02, 03, 04, 05, 06, 07, //
+];
+pub const ADIAG: [usize; 64] = [
+    00, 01, 02, 03, 04, 05, 06, 07, //
+    01, 02, 03, 04, 05, 06, 07, 08, //
+    02, 03, 04, 05, 06, 07, 08, 09, //
+    03, 04, 05, 06, 07, 08, 09, 10, //
+    04, 05, 06, 07, 08, 09, 10, 11, //
+    05, 06, 07, 08, 09, 10, 11, 12, //
+    06, 07, 08, 09, 10, 11, 12, 13, //
+    07, 08, 09, 10, 11, 12, 13, 14, //
+];
+
+pub const RAYS: [[BitBoard; 64]; 64] = init_rays();
+
+pub const fn init_rays() -> [[BitBoard; 64]; 64] {
+    let mut rays: [[BitBoard; 64]; 64] = [[BB::ZERO; 64]; 64];
+    let mut i: usize = 0;
+    while i < 64 {
+        let mut j: usize = 0;
+        while j < 64 {
+            let data = (1u64 << i) | (1u64 << j);
+            let squares = BB { data };
+            if (ROWS[i] == ROWS[j]) || (COLS[i] == COLS[j]) {
+                let data: u64 = get_rook_attack(i, squares).data & get_rook_attack(j, squares).data;
+                rays[i][j].data = data;
+            } else if (DDIAG[i] == DDIAG[j]) || (ADIAG[i] == ADIAG[j]) {
+                let data = get_bishop_attack(i, squares).data & get_bishop_attack(j, squares).data;
+                rays[i][j].data = data;
+            }
+            j += 1;
+        }
+        i += 1;
+    }
+    rays
+}
+
 /* some u64 bit manipulation support */
 impl BitBoard {
     pub const ZERO: BB = BB { data: 0u64 };
@@ -118,9 +195,7 @@ impl BitBoard {
     }
 
     pub const fn get_bit(&self, i: usize) -> BB {
-        BB {
-            data: self.data & (1u64 << i),
-        }
+        BB { data: self.data & (1u64 << i) }
     }
 
     pub const fn pop_bit(&self, i: usize) -> BB {
@@ -289,7 +364,7 @@ const fn init_king_attack() -> [BB; 64] {
             //up right
             data |= ((1u64 << i) << 8) >> 1;
         }
-        if i < 56 && 1 % 8 < 7 {
+        if i < 56 && i % 8 < 7 {
             //up left
             data |= ((1u64 << i) << 8) << 1;
         }
@@ -796,8 +871,8 @@ const fn init_rook_mbb_mask() -> [BB; 64] {
     return attack_array;
 }
 
-const SIZE_BISHOP: usize = 1 << 9;
-const SIZE_ROOK: usize = 1 << 12;
+const SIZE_BISHOP: usize = 1 << 9; //size of the index for bishop magic bitboard index in bits
+const SIZE_ROOK: usize = 1 << 12; //size of the index for rook magic bitboard index in bits
 
 const fn init_bishop_attack_mbb() -> [[BB; 1 << 9]; 64] {
     let mut i: usize = 0;
@@ -869,7 +944,5 @@ pub const fn get_rook_attack(square: usize, blockers: BB) -> BB {
 
 //#[inline(always)]
 pub const fn get_queen_attack(square: usize, blockers: BB) -> BB {
-    BB {
-        data: get_bishop_attack(square, blockers).data | get_rook_attack(square, blockers).data,
-    }
+    BB { data: get_bishop_attack(square, blockers).data | get_rook_attack(square, blockers).data }
 }

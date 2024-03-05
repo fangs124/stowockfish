@@ -226,12 +226,7 @@ impl ChessMove {
     pub fn print_move(&self) -> String {
         if self.piece().is_some() {
             let piece = self.piece().unwrap();
-            format!(
-                "{}{}{}",
-                SQUARE_SYM[self.source()],
-                SQUARE_SYM[self.target()],
-                piece.to_char()
-            )
+            format!("{}{}{}", SQUARE_SYM[self.source()], SQUARE_SYM[self.target()], piece.to_char())
         } else {
             format!("{}{}", SQUARE_SYM[self.source()], SQUARE_SYM[self.target()])
         }
@@ -246,19 +241,13 @@ pub struct MovesArray {
 
 impl MovesArray {
     pub const fn new() -> Self {
-        Self {
-            data: [None; 256],
-            count: 0,
-        }
+        Self { data: [None; 256], count: 0 }
     }
 
     pub const fn new_add(&self, chess_move: ChessMove) -> MovesArray {
         let mut data = self.data;
         data[self.count] = Some(chess_move);
-        MovesArray {
-            data,
-            count: self.count + 1,
-        }
+        MovesArray { data, count: self.count + 1 }
     }
 
     pub const fn new_raw(
@@ -279,16 +268,23 @@ impl MovesArray {
             let chess_move = self.data[self.count - 1];
             let mut data = self.data;
             data[self.count - 1] = None;
-            return (
-                MovesArray {
-                    data,
-                    count: self.count - 1,
-                },
-                chess_move,
-            );
+            return (MovesArray { data, count: self.count - 1 }, chess_move);
         }
     }
 
+    pub const fn new_promotions(&self, source: usize, target: usize) -> Self {
+        let mut new_arr = self.const_clone();
+        new_arr.data[new_arr.count + 0] =
+            Some(ChessMove::new(source, target, Some(PieceType::Queen), MT::Promotion));
+        new_arr.data[new_arr.count + 1] =
+            Some(ChessMove::new(source, target, Some(PieceType::Rook), MT::Promotion));
+        new_arr.data[new_arr.count + 2] =
+            Some(ChessMove::new(source, target, Some(PieceType::Bishop), MT::Promotion));
+        new_arr.data[new_arr.count + 3] =
+            Some(ChessMove::new(source, target, Some(PieceType::Knight), MT::Promotion));
+        new_arr.count += 4;
+        new_arr
+    }
     pub fn push(&mut self, chess_move: ChessMove) {
         self.data[self.count] = Some(chess_move);
         self.count += 1;
@@ -305,19 +301,13 @@ impl MovesArray {
         }
     }
     pub fn to_vec(&self) -> Vec<ChessMove> {
-        self.data[0..self.len()]
-            .into_iter()
-            .map(|x| x.unwrap())
-            .collect()
+        self.data[0..self.len()].into_iter().map(|x| x.unwrap()).collect()
     }
 
     pub fn sort(&mut self) {
         let moves_vec: Vec<ChessMove> = self.to_vec();
-        let str_vec = moves_vec
-            .clone()
-            .into_iter()
-            .map(|x| format!("{}", x))
-            .collect::<Vec<String>>();
+        let str_vec =
+            moves_vec.clone().into_iter().map(|x| format!("{}", x)).collect::<Vec<String>>();
         let mut pair_vec: Vec<(String, ChessMove)> =
             str_vec.into_iter().zip(moves_vec.into_iter()).collect();
         pair_vec.sort();
@@ -327,10 +317,7 @@ impl MovesArray {
     }
 
     pub const fn const_clone(&self) -> MovesArray {
-        MovesArray {
-            data: self.data,
-            count: self.count,
-        }
+        MovesArray { data: self.data, count: self.count }
     }
 
     pub const fn len(&self) -> usize {

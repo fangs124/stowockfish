@@ -54,35 +54,41 @@ fn main() {
     */
     //let moves_indices: [usize; 12] = [8usize, 0, 6, 8, 18, 1, 1, 4, 0, 0,4, 15]; //series 1
     let moves_indices: [usize; 0] = [];
-    let moves_indices = [6, 0, 6]; //series 2
+    //let moves_indices = [6, 0, 6, 0, 8, 10, 18]; //series 2
+    let moves_indices = [
+        2usize, 0, 8, 0, 4, 0, 16, 0, 0, 0, 6, 0, 11, 7, 0, 1, 9, 14, 0, 18, 15, 21, 9, 4, 0, 10,
+        2, 15, 1, 9,
+    ];
     let mut chessboard = CB::default();
+    let mut moves_arr = MovesArray::new();
+    let (x, y) = (23, 58);
+    println!("RAYS[x][y]:");
+    println!("{}", RAYS[x][y]);
     //let mut chessboard = CB::from_fen(TEST_FEN2);
-    chessboard.generate_moves();
-    chessboard.moves_arr.sort();
+    moves_arr = chessboard.generate_moves();
+    moves_arr.sort();
     for i in moves_indices {
-        chessboard = chessboard.update_state(chessboard.moves_arr.data()[i].unwrap());
-        chessboard.generate_moves();
-        chessboard.moves_arr.sort();
+        chessboard = chessboard.update_state(moves_arr.data()[i].unwrap());
+        moves_arr = chessboard.generate_moves();
+        if i == moves_indices.len() {
+            println!("{:?}", moves_arr);
+        }
+        moves_arr.sort();
     }
-    println!("{:?}", chessboard.moves_arr);
     /*
      */
+    //println!("mailbox:");
+    //println!("{:?}", chessboard.mailbox);
     println!("==== start position ====\n");
     println!("{}", chessboard);
     println!("========================");
-    println!("{}\n", chessboard.piece_bbs[5]);
-    println!("========================");
-    println!("{}\n", chessboard.piece_bbs[11]);
-    println!("========================");
-    println!("{:?}\n", chessboard.mailbox);
-    println!("========================");
     let mut i: usize = 1;
-    let max_depth = 10;
+    let max_depth = 5;
     while i < max_depth {
         let now = Instant::now();
         let total = chessboard.perft_count(i);
         let elapsed = now.elapsed();
-        let mut arr = chessboard.generate_moves_array();
+        let mut arr = chessboard.generate_moves();
         arr.sort();
         //arr.sort();
         let mut result_str_vec = Vec::<String>::new();
@@ -100,12 +106,7 @@ fn main() {
             j += 1;
         }
         //result_str_vec.sort();
-        println!(
-            "depth: {}, time: {}ns, total: {}",
-            i,
-            elapsed.as_nanos(),
-            total
-        );
+        println!("depth: {}, time: {}, total: {}", i, elapsed.as_secs(), total);
         for x in result_str_vec {
             println!("{}", x);
         }
