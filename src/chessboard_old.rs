@@ -92,8 +92,8 @@ const ASCII_SYM: [char; 12] = ['K','Q','N','B','R','P','k','q','n','b','r','p'];
 const UNICODE_SYM: [char; 12] = ['♚','♛','♞','♝','♜','♟','♔','♕','♘', '♗','♖','♙'];
 const W_KING_SIDE_CASTLE_MASK: BB = BB {data: 0b00000110};
 const W_QUEEN_SIDE_CASTLE_MASK:  BB = BB {data: 0b01110000};
-const B_KING_SIDE_CASTLE_MASK: BB = BB {data: 0b00000110 << (8*7)};
-const B_QUEEN_SIDE_CASTLE_MASK:  BB = BB {data: 0b01110000 << (8*7)};
+const B_KING_SIDE_CASTLE_MASK: BB = BB {data: 0b00000110_00000000_00000000_00000000_00000000_00000000_00000000_00000000};
+const B_QUEEN_SIDE_CASTLE_MASK:  BB = BB {data: 0b01110000_00000000_00000000_00000000_00000000_00000000_00000000_00000000};
 
 pub const INITIAL_CHESS_POS: [BB; 12] = [
     BB { data: 0b00000000_00001000}, // ♔
@@ -3198,6 +3198,7 @@ impl ChessBoard {
             check_bb    : self.check_bb,
         }
     }
+    
     //pub const fn Mathemagician(mut self, chess_move : ChessMove) -> Self {self.check_bb = BB{data:u64::MAX}; self}
     pub const fn update_state(&self, chess_move : ChessMove) -> ChessBoard {
         let mut chess_board = self.const_clone();
@@ -3492,6 +3493,7 @@ impl ChessBoard {
             }
 
             MoveType::Promotion => {
+
                 if let Some(data_source) = chess_board.mailbox[source] {
                     // set bit of source to zero
                     chess_board.piece_bbs[cpt_index(data_source)].data &= !(1 << source);

@@ -3,7 +3,6 @@
 
 use core::panic;
 use std::fmt::Display;
-use std::intrinsics::likely;
 
 use crate::bitboard::*;
 use crate::chessboard;
@@ -84,8 +83,11 @@ const ASCII_SYM: [char; 12] = ['K', 'Q', 'N', 'B', 'R', 'P', 'k', 'q', 'n', 'b',
 const UNICODE_SYM: [char; 12] = ['♚', '♛', '♞', '♝', '♜', '♟', '♔', '♕', '♘', '♗', '♖', '♙'];
 const W_KING_SIDE_CASTLE_MASK: BB = BB { data: 0b00000110 };
 const W_QUEEN_SIDE_CASTLE_MASK: BB = BB { data: 0b01110000 };
-const B_KING_SIDE_CASTLE_MASK: BB = BB { data: 0b00000110 << (8 * 7) };
-const B_QUEEN_SIDE_CASTLE_MASK: BB = BB { data: 0b01110000 << (8 * 7) };
+const B_KING_SIDE_CASTLE_MASK: BB =
+    BB { data: 0b00000110_00000000_00000000_00000000_00000000_00000000_00000000_00000000 };
+const B_QUEEN_SIDE_CASTLE_MASK: BB =
+    BB { data: 0b01110000_00000000_00000000_00000000_00000000_00000000_00000000_00000000 };
+
 
 #[rustfmt::skip]
 pub const INITIAL_CHESS_POS: [BB; 12] = [
@@ -162,6 +164,36 @@ pub const INITIAL_MAILBOX: [Option<ColouredPieceType>; 64] = [
     opt_cpt!(p), opt_cpt!(p), opt_cpt!(p), opt_cpt!(p), opt_cpt!(p), opt_cpt!(p), opt_cpt!(p), opt_cpt!(p),
     opt_cpt!(r), opt_cpt!(n), opt_cpt!(b), opt_cpt!(k), opt_cpt!(q), opt_cpt!(b), opt_cpt!(n), opt_cpt!(r),
 ];
+
+pub const fn generate_mailbox(bbs: [BitBoard; 12]) -> [Option<ColouredPieceType>; 64] {
+    let mut mailbox: [Option<ColouredPieceType>; 64] = [None; 64];
+    let mut i: usize = 0;
+    while i < 12 {
+        let mut j: usize = 0;
+        while j < 64 {
+            if bbs[i].data & (1u64 << j) != 0 {
+                mailbox[j] = match i {
+                    00 => opt_cpt!(K),
+                    01 => opt_cpt!(Q),
+                    02 => opt_cpt!(N),
+                    03 => opt_cpt!(B),
+                    04 => opt_cpt!(R),
+                    05 => opt_cpt!(P),
+                    06 => opt_cpt!(k),
+                    07 => opt_cpt!(q),
+                    08 => opt_cpt!(n),
+                    09 => opt_cpt!(b),
+                    10 => opt_cpt!(r),
+                    11 => opt_cpt!(p),
+                    __ => unreachable!(),
+                };
+            }
+            j += 1;
+        }
+        i += 1;
+    }
+    mailbox
+}
 
 // ['K','Q','N','B','R','P','k','q','n','b','r','p'];
 type ColouredPieceType = (Side, PieceType);
@@ -254,7 +286,7 @@ impl ChessBoard {
     }
 
     pub const fn is_square_attacked(&self, square: usize, attacker_side: Side) -> bool {
-        assert!(0 < square && square < 64);
+        assert!(square < 64);
         let blockers = self.blockers();
         match attacker_side {
             Side::White => {
@@ -281,14 +313,24 @@ impl ChessBoard {
     pub const fn piece_is_pinned(&self, square: usize) -> bool {
         assert!(square < 64);
         let mut chessboard = self.const_clone();
-        let piece= match self.mailbox[square] {
+        let piece = match self.mailbox[square] {
             Some(p) => p,
-            None => panic!("piece_is_pinned error: square is empty!"),
+            None => {
+                //debug
+                //println!("========================");
+                //println!("square:\n{}", BB { data: (1u64 << square) });
+                //println!("========================");
+                //println!("chessboard:\n{}", chessboard);
+                //println!("========================");
+                //println!("mailbox:\n{}", print_mailbox(chessboard.mailbox));
+                //println!("========================");
+                panic!("piece_is_pinned error: square is empty!");
+            }
         };
         chessboard.piece_bbs[cpt_index(piece)].data &= !(1u64 << square);
         chessboard.mailbox[cpt_index(piece)] = None;
         let side = self.side_to_move;
-        
+
         // assertion hack
         match piece {
             cpt!(K) | cpt!(k) => panic!("piece_is_pinned error: invalid piece to check!"),
@@ -297,29 +339,27 @@ impl ChessBoard {
         // if king is not in check, test if removing piece causes king to be in check
         if !self.king_is_in_check(side) {
             return chessboard.king_is_in_check(side);
-        } 
-        else {
+        } else {
             //note: THIS BIT IS SLOW!!!
-            let (q_index,b_index, r_index) = match side {
-                Side::White => {
-                    (07, 09, 10)
-                }
-                    Side::Black => {
-                    (01, 03, 04)
-                }
+            let (q_index, b_index, r_index) = match side {
+                Side::White => (07, 09, 10),
+                Side::Black => (01, 03, 04),
             };
 
             let d_data = self.piece_bbs[q_index].data | self.piece_bbs[b_index].data;
             let l_data = self.piece_bbs[q_index].data | self.piece_bbs[r_index].data;
-            let diagonals = BB{data: d_data};
-            let laterals = BB{data: l_data};
+            let diagonals = BB { data: d_data };
+            let laterals = BB { data: l_data };
 
             let enemies = match side {
                 Side::White => self.black_blockers(),
                 Side::Black => self.white_blockers(),
             };
-            
-            assert!(self.piece_bbs[0].data.count_ones() == 1&& self.piece_bbs[6].data.count_ones() == 1);
+
+            assert!(
+                self.piece_bbs[0].data.count_ones() == 1
+                    && self.piece_bbs[6].data.count_ones() == 1
+            );
             let king_pos: usize = match side {
                 Side::White => match self.piece_bbs[0].lsb_index() {
                     Some(x) => x,
@@ -330,17 +370,16 @@ impl ChessBoard {
                     None => unreachable!(),
                 },
             };
-            let removed_blockers = BB{data:self.blockers().data & !(1u64 << square)};
-            let data = enemies.data & (
-                (get_bishop_attack(king_pos, removed_blockers).data & diagonals.data) |
-                (get_rook_attack(king_pos, removed_blockers).data & laterals.data)
-            );
+            let removed_blockers = BB { data: self.blockers().data & !(1u64 << square) };
+            let data = enemies.data
+                & ((get_bishop_attack(king_pos, removed_blockers).data & diagonals.data)
+                    | (get_rook_attack(king_pos, removed_blockers).data & laterals.data));
             let mut potential_pinners: BitBoard = BB { data };
 
-            while potential_pinners.data != 0 {                        
+            while potential_pinners.data != 0 {
                 let potential_pinner = match potential_pinners.lsb_index() {
                     Some(x) => x,
-                    None => unreachable!()
+                    None => unreachable!(),
                 };
                 // check if piece is between king and potential_pinner
                 if RAYS[king_pos][potential_pinner].data & (1u64 << square) != 0 {
@@ -377,18 +416,22 @@ impl ChessBoard {
         }
     }
 
-    pub const fn perft_count(&self, depth: usize) -> u64 {
+    pub fn perft_count(&self, depth: usize) -> u64 {
         if depth == 0 {
+            // this is used when printing the individual moves in a given position
             return 1;
         }
 
-        let arr = self.generate_moves(); //todo!!!!
+        let arr = self.generate_moves();
+        if depth == 1 {
+            return arr.len() as u64;
+        }
         let mut i: usize = 0;
         let mut total: u64 = 0;
         while i < arr.len() {
             if let Some(chess_move) = arr.data()[i] {
-                let chess_board = self.update_state(chess_move);
-                total += chess_board.perft_count(depth - 1);
+                let chessboard = self.update_state(chess_move);
+                total += chessboard.perft_count(depth - 1);
             } else {
                 panic!("perft_count error: chess_move is None!");
             }
@@ -399,8 +442,10 @@ impl ChessBoard {
     }
 
     //pub const fn generate_moves(&self) -> MovesArray {
-    pub fn generate_moves(&self) -> MovesArray {
-        assert!(self.piece_bbs[0].data.count_ones() == 1&& self.piece_bbs[6].data.count_ones() == 1);
+    pub const fn generate_moves(&self) -> MovesArray {
+        assert!(
+            self.piece_bbs[0].data.count_ones() == 1 && self.piece_bbs[6].data.count_ones() == 1
+        );
         let mut arr = MovesArray::new();
         let blockers = self.blockers();
         let w_blockers = self.white_blockers();
@@ -429,6 +474,7 @@ impl ChessBoard {
 
         // consider if king is in check
         let mut check_mask: BitBoard = self.check_bb;
+        let checkers_count = self.check_bb.data.count_ones();
         if self.check_bb.data != 0 {
             let mut checkers = self.check_bb;
             let index: usize = match side {
@@ -454,27 +500,28 @@ impl ChessBoard {
 
                 if let Some(piece) = self.mailbox[i] {
                     match piece {
-                        cpt!(K) | cpt!(k) => panic!("generate_moves error: king is in check by another king!"),
+                        cpt!(K) | cpt!(k) => {
+                            panic!("generate_moves error: king is in check by another king!")
+                        }
                         cpt!(N) | cpt!(n) => {
                             check_mask.data |= KNIGHT_ATTACKS[i].data & KNIGHT_ATTACKS[k].data;
-                        },
+                        }
                         _ => {
                             check_mask.data |= RAYS[i][k].data;
-                        },
-                        /*
-                        cpt!(Q) | cpt!(q) => {
-                            check_mask.data |=  RAYS[i][k].data;
-                        }
-                        cpt!(B) | cpt!(b) => {
-                            check_mask.data |= RAYS[i][k].data;
-                        }
-                        cpt!(R) | cpt!(r) => {
-                            check_mask.data |= RAYS[i][k].data;
-                        }
-                        cpt!(P) | cpt!(p) => {
-                            check_mask.data |= RAYS[i][k].data;
-                        }
-                        */
+                        } /*
+                          cpt!(Q) | cpt!(q) => {
+                              check_mask.data |=  RAYS[i][k].data;
+                          }
+                          cpt!(B) | cpt!(b) => {
+                              check_mask.data |= RAYS[i][k].data;
+                          }
+                          cpt!(R) | cpt!(r) => {
+                              check_mask.data |= RAYS[i][k].data;
+                          }
+                          cpt!(P) | cpt!(p) => {
+                              check_mask.data |= RAYS[i][k].data;
+                          }
+                          */
                     }
                 }
                 checkers = checkers.pop_bit(i)
@@ -497,7 +544,7 @@ impl ChessBoard {
                     Some(x) => x,
                     None => unreachable!(),
                 };
-                
+
                 // pin information
                 let mut pinners = BB::ZERO;
                 let mut pin_mask = BB::ZERO;
@@ -505,34 +552,31 @@ impl ChessBoard {
                     0 | 6 => false,
                     _____ => self.piece_is_pinned(source),
                 };
-
                 if is_pinned {
-                    let (q_index,b_index, r_index) = match side {
-                        Side::White => {
-                            (07, 09, 10)
-                        }
-                         Side::Black => {
-                            (01, 03, 04)
-                        }
+                    let (q_index, b_index, r_index) = match side {
+                        Side::White => (07, 09, 10),
+                        Side::Black => (01, 03, 04),
                     };
-                    let d_data = (self.piece_bbs[q_index].data | self.piece_bbs[b_index].data) & !(1u64 << source);
-                    let l_data = (self.piece_bbs[q_index].data | self.piece_bbs[r_index].data) & !(1u64 << source);
-                    let diagonals = BB{data: d_data};
-                    let laterals = BB{data: l_data};
-                    let data = enemies.data & (
-                        (get_bishop_attack(king_pos, diagonals).data & diagonals.data) |
-                        (get_rook_attack(king_pos, laterals).data & laterals.data)
-                    );
+                    let d_data = (self.piece_bbs[q_index].data | self.piece_bbs[b_index].data)
+                        & !(1u64 << source);
+                    let l_data = (self.piece_bbs[q_index].data | self.piece_bbs[r_index].data)
+                        & !(1u64 << source);
+                    let diagonals = BB { data: d_data };
+                    let laterals = BB { data: l_data };
+                    let data = enemies.data
+                        & ((get_bishop_attack(king_pos, diagonals).data & diagonals.data)
+                            | (get_rook_attack(king_pos, laterals).data & laterals.data));
                     let mut potential_pinners: BitBoard = BB { data };
-                    while potential_pinners.data != 0 {                        
+                    while potential_pinners.data != 0 {
                         let potential_pinner = match potential_pinners.lsb_index() {
                             Some(x) => x,
-                            None => unreachable!()
+                            None => unreachable!(),
                         };
                         // check if piece is between king and potential_pinner
                         if RAYS[king_pos][potential_pinner].data & (1u64 << source) != 0 {
                             pinners.data |= 1u64 << potential_pinner;
-                            pin_mask.data |= RAYS[king_pos][potential_pinner].data | (1u64 << potential_pinner);
+                            pin_mask.data |=
+                                RAYS[king_pos][potential_pinner].data | (1u64 << potential_pinner);
                         }
                         potential_pinners = potential_pinners.pop_bit(potential_pinner);
                     }
@@ -546,9 +590,9 @@ impl ChessBoard {
                             // can not castle whilst in check
                             let (k_mask, k_index) = match side {
                                 Side::White => (W_KING_SIDE_CASTLE_MASK, 0),
-                                Side::Black => (W_QUEEN_SIDE_CASTLE_MASK, 1),
+                                Side::Black => (B_KING_SIDE_CASTLE_MASK, 2),
                             };
-
+                            // king-side
                             if self.castle_bools[k_index] && (blockers.data & k_mask.data == 0) {
                                 //check if squares are under attack
                                 let mut squares = k_mask;
@@ -558,7 +602,10 @@ impl ChessBoard {
                                         Some(x) => x,
                                         None => unreachable!(),
                                     };
-                                    can_castle = !self.is_square_attacked(square, side.update());
+
+                                    if self.is_square_attacked(square, side.update()) {
+                                        can_castle = false;
+                                    }
                                     squares = squares.pop_bit(square);
                                 }
                                 if can_castle {
@@ -570,19 +617,28 @@ impl ChessBoard {
                             }
 
                             let (q_mask, q_index) = match side {
-                                Side::White => (B_KING_SIDE_CASTLE_MASK, 2),
+                                Side::White => (W_QUEEN_SIDE_CASTLE_MASK, 1),
                                 Side::Black => (B_QUEEN_SIDE_CASTLE_MASK, 3),
                             };
+                            // queen side
                             if self.castle_bools[q_index] && (blockers.data & q_mask.data == 0) {
                                 //check if squares are under attack
-                                let mut squares = q_mask;
+                                let data = match side {
+                                    Side::White => q_mask.data & !(1u64 << 06),
+                                    Side::Black => q_mask.data & !(1u64 << 62),
+                                };
+
+                                let mut squares = BB { data };
                                 let mut can_castle = true;
                                 while squares.data != 0 {
                                     let square = match squares.lsb_index() {
                                         Some(x) => x,
                                         None => unreachable!(),
                                     };
-                                    can_castle = !self.is_square_attacked(square, side.update());
+
+                                    if self.is_square_attacked(square, side.update()) {
+                                        can_castle = false;
+                                    }
                                     squares = squares.pop_bit(square);
                                 }
                                 if can_castle {
@@ -639,6 +695,12 @@ impl ChessBoard {
                                 continue;
                             }
 
+                            // when double checked king has to move
+                            if checkers_count > 1 {
+                                attacks = attacks.pop_bit(target);
+                                continue;
+                            }
+
                             arr = arr.new_raw(source, target, None, MT::Normal);
                             attacks = attacks.pop_bit(target);
                         }
@@ -662,6 +724,12 @@ impl ChessBoard {
 
                             // only consider moves along checking ray if in check
                             if (check_mask.data != 0) && (check_mask.data & (1u64 << target) == 0) {
+                                attacks = attacks.pop_bit(target);
+                                continue;
+                            }
+
+                            // when double checked king has to move
+                            if checkers_count > 1 {
                                 attacks = attacks.pop_bit(target);
                                 continue;
                             }
@@ -693,6 +761,12 @@ impl ChessBoard {
                                 continue;
                             }
 
+                            // when double checked king has to move
+                            if checkers_count > 1 {
+                                attacks = attacks.pop_bit(target);
+                                continue;
+                            }
+
                             arr = arr.new_raw(source, target, None, MT::Normal);
                             attacks = attacks.pop_bit(target);
                         }
@@ -720,6 +794,12 @@ impl ChessBoard {
                                 continue;
                             }
 
+                            // when double checked king has to move
+                            if checkers_count > 1 {
+                                attacks = attacks.pop_bit(target);
+                                continue;
+                            }
+
                             arr = arr.new_raw(source, target, None, MT::Normal);
                             attacks = attacks.pop_bit(target);
                         }
@@ -738,7 +818,7 @@ impl ChessBoard {
                         //    Side::White => false,
                         //    Side::Black => true,
                         //};
-                        //if king_pos == 51 && side_to_move_is_black && data != 0 {
+                        //if king_pos == 22 {
                         //    println!("source:");
                         //    println!("{}", BB{data: (1u64<<source)});
                         //    println!("is_pinned:{}", is_pinned);
@@ -747,8 +827,9 @@ impl ChessBoard {
                         //    println!("pin_mask:");
                         //    println!("{}", pin_mask);
                         //}
-                        
-                        if pin_mask.data != 0 { // TODO: FIX HERE!!!
+
+                        if pin_mask.data != 0 {
+                            // TODO: FIX HERE!!!
                             let mut squares = pinners;
                             while squares.data != 0 {
                                 let square = match squares.lsb_index() {
@@ -757,35 +838,27 @@ impl ChessBoard {
                                 };
                                 assert!(source != square);
                                 if RAYS[king_pos][square].data & (1u64 << source) != 0 {
-                                    if DDIAG[source] == DDIAG[square] || ADIAG[source] == ADIAG[square] {
+                                    if DDIAG[source] == DDIAG[square]
+                                        || ADIAG[source] == ADIAG[square]
+                                    {
                                         is_diagonal_pinned = true;
-                                    }
-                                    else if COLS[source] == COLS[square] {
+                                    } else if COLS[source] == COLS[square] {
                                         is_vertical_pinned = true;
-                                    }
-                                    else if ROWS[source] == ROWS[square] {
+                                    } else if ROWS[source] == ROWS[square] {
                                         is_horizontal_pinned = true;
                                     }
                                 }
                                 squares = squares.pop_bit(square);
-                                //debug
-                                //if source == 30 && self.king_is_in_check(Side::White) {
-                                //    println!("pinners:");
-                                //    println!("{}", pinners);
-                                //    println!("pin_mask:");
-                                //    println!("{}", pin_mask);
-                                //    println!("piece_is_pinned: {}", self.piece_is_pinned(source));
-                                //    println!("is_diagonal_pinned: {}", is_diagonal_pinned);
-                                //    println!("is_vertical_pinned: {}", is_vertical_pinned);
-                                //    println!("is_horizontal_pinned: {}",is_horizontal_pinned);
-                                //}
                             }
-
                         }
 
                         /* pawn moves */
                         if !is_diagonal_pinned && !is_horizontal_pinned {
                             /* one square */
+                            //if source < 8 {
+                            //    println!("chessboard:");
+                            //    println!("{}", self);
+                            //}
                             let target = match side {
                                 Side::White => source + 8,
                                 Side::Black => source - 8,
@@ -793,10 +866,13 @@ impl ChessBoard {
                             // can only move one square if next square is empty
                             if (1u64 << target) & blockers.data == 0 {
                                 // can only move one square if not in check or blocks check
-                                if check_mask.data == 0 || check_mask.data & (1u64 << target) != 0 {
+                                if check_mask.data == 0
+                                    || (check_mask.data & (1u64 << target) != 0
+                                        && checkers_count == 1)
+                                {
                                     let next_square_promotion = match side {
-                                        Side::White => target >= 56,
-                                        Side::Black => target <= 7,
+                                        Side::White => source >= 48,
+                                        Side::Black => source <= 15,
                                     };
 
                                     if next_square_promotion {
@@ -814,20 +890,25 @@ impl ChessBoard {
                                 Side::White => source + 8,
                                 Side::Black => source - 8,
                             };
-                            
-                            let target = match side {
-                                Side::White => source + 16,
-                                Side::Black => source - 16,
-                            };
+
                             let is_initial_sq = match side {
                                 Side::White => ROWS[source] == 1,
                                 Side::Black => ROWS[source] == 6,
                             };
-                            // can only move two squares if pawn is at starting position, and next two squares are empty
-                            if is_initial_sq && ((1u64 << next) | (1 << target)) & blockers.data == 0 {
-                                // can only move one square if not in check or blocks check
-                                if check_mask.data == 0 || check_mask.data & (1u64 << target) != 0 {
-                                    arr = arr.new_raw(source, target, None, MT::Normal);
+                            if is_initial_sq {
+                                let target = match side {
+                                    Side::White => source + 16,
+                                    Side::Black => source - 16,
+                                };
+                                // can only move two squares if pawn is at starting position, and next two squares are empty
+                                if ((1u64 << next) | (1 << target)) & blockers.data == 0 {
+                                    // can only move one square if not in check or blocks check
+                                    if check_mask.data == 0
+                                        || (check_mask.data & (1u64 << target) != 0
+                                            && checkers_count == 1)
+                                    {
+                                        arr = arr.new_raw(source, target, None, MT::Normal);
+                                    }
                                 }
                             }
                         }
@@ -846,12 +927,15 @@ impl ChessBoard {
                                 };
 
                                 // can only attack a square if not in check or attack blocks check
-                                if check_mask.data == 0 || check_mask.data & (1u64 << target) != 0 {
+                                if check_mask.data == 0
+                                    || (check_mask.data & (1u64 << target) != 0
+                                        && checkers_count == 1)
+                                {
                                     //can only attack a square if not pinned or attack is along pin ray
                                     if pin_mask.data == 0 || pin_mask.data & (1u64 << target) != 0 {
                                         let next_square_promotion = match side {
-                                            Side::White => target >= 56,
-                                            Side::Black => target <= 7,
+                                            Side::White => source >= 48,
+                                            Side::Black => source <= 15,
                                         };
 
                                         if next_square_promotion {
@@ -869,20 +953,43 @@ impl ChessBoard {
 
                         /* en passant */
                         if self.enpassant_bb.data != 0 && !is_pinned {
-                            let data = self.enpassant_bb.data & match side {
-                                Side::White => W_PAWN_ATTACKS[source].data,
-                                Side::Black => B_PAWN_ATTACKS[source].data,
-                            };
-                            let targets = BB{data};
+                            let data = self.enpassant_bb.data
+                                & match side {
+                                    Side::White => W_PAWN_ATTACKS[source].data,
+                                    Side::Black => B_PAWN_ATTACKS[source].data,
+                                };
+                            let mut targets = BB { data };
                             while targets.data != 0 {
                                 let target = match targets.lsb_index() {
                                     Some(x) => x,
                                     None => unreachable!(),
                                 };
-                                // if in check, can only en passant if 
-                                if
-                            }
 
+                                // if there are no checks
+                                if self.check_bb.data == 0 {
+                                    arr = arr.new_raw(source, target, None, MT::EnPassant);
+                                    targets = targets.pop_bit(target);
+                                    continue;
+                                }
+
+                                // if in check, can only en passant to remove checking pawn
+                                if checkers_count == 1 {
+                                    let checker = match self.check_bb.lsb_index() {
+                                        Some(x) => x,
+                                        None => unreachable!(),
+                                    };
+
+                                    let enemy_pawn_pos = match side {
+                                        Side::White => target - 8,
+                                        Side::Black => target + 8,
+                                    };
+
+                                    if checker == enemy_pawn_pos {
+                                        arr = arr.new_raw(source, target, None, MT::EnPassant);
+                                    }
+                                }
+                                targets = targets.pop_bit(target);
+                            }
                         }
                     }
 
@@ -895,51 +1002,54 @@ impl ChessBoard {
         arr
     }
 
-    //note: need to rewrite this. rn I'm too lazy
-    pub const fn update_state(&self, chess_move : ChessMove) -> ChessBoard {
-        let mut chess_board = self.const_clone();
-        let mut enpassant_bb:BitBoard = BB::ZERO;
+    pub const fn update_state(&self, chess_move: ChessMove) -> ChessBoard {
+        let mut chessboard = self.const_clone();
+        let mut enpassant_bb: BitBoard = BB::ZERO;
         let source: usize = chess_move.source();
-        let target: usize = chess_move.target();       
+        let target: usize = chess_move.target();
+        let source_data = match chessboard.mailbox[source] {
+            Some(x) => x,
+            None => panic!("update_state error: source mailbox is None!"),
+        };
+        let source_index = cpt_index(source_data);
+
         // handle special cases
-        match chess_board.mailbox[source] {
+        match chessboard.mailbox[source] {
             opt_cpt!(_) => panic!("update_state error: source mailbox is None!"),
-            
-            /* special case: castling rights */ 
+
+            /* special case: castling rights */
             opt_cpt!(K) => {
-                chess_board.castle_bools[0] = false;
-                chess_board.castle_bools[1] = false;
+                chessboard.castle_bools[0] = false;
+                chessboard.castle_bools[1] = false;
             }
             opt_cpt!(R) => {
                 if source == 0 {
-                    chess_board.castle_bools[0] = false;
-                }
-                else if source == 7 {
-                    chess_board.castle_bools[1] = false
+                    chessboard.castle_bools[0] = false;
+                } else if source == 7 {
+                    chessboard.castle_bools[1] = false
                 }
             }
             opt_cpt!(k) => {
-                chess_board.castle_bools[2] = false;
-                chess_board.castle_bools[3] = false;
+                chessboard.castle_bools[2] = false;
+                chessboard.castle_bools[3] = false;
             }
             opt_cpt!(r) => {
                 if source == 56 {
-                    chess_board.castle_bools[2] = false;
-                }
-                else if source == 63 {
-                    chess_board.castle_bools[3] = false
+                    chessboard.castle_bools[2] = false;
+                } else if source == 63 {
+                    chessboard.castle_bools[3] = false
                 }
             }
-            /* special case: pawn 2-squares move, en passant rules */ 
+            /* special case: pawn 2-squares move, en passant rules */
             opt_cpt!(P) => {
                 // check if move is 2-square
                 if source + 16 == target {
                     if target + 1 < 64 {
                         // check pawn lands next to enemy pawn
-                        match chess_board.mailbox[target + 1] {
+                        match chessboard.mailbox[target + 1] {
                             opt_cpt!(p) => {
                                 //check if pawn is not pinned
-                                if !chess_board.piece_is_pinned(target + 1) {
+                                if !chessboard.piece_is_pinned(target + 1) {
                                     enpassant_bb.data &= 1 << target - 8
                                 }
                             }
@@ -947,12 +1057,13 @@ impl ChessBoard {
                         }
                     }
 
-                    if 0 + 1 <= target { // unsigned hack: 0 <= target - 1
+                    if 0 + 1 <= target {
+                        // unsigned hack: 0 <= target - 1
                         // check pawn lands next to enemy pawn
-                        match chess_board.mailbox[target - 1] {
+                        match chessboard.mailbox[target - 1] {
                             opt_cpt!(p) => {
                                 //check if pawn is not pinned
-                                if !chess_board.piece_is_pinned(target - 1) {
+                                if !chessboard.piece_is_pinned(target - 1) {
                                     enpassant_bb.data &= 1 << target - 8
                                 }
                             }
@@ -962,26 +1073,28 @@ impl ChessBoard {
                 }
             }
             opt_cpt!(p) => {
-                if source == target + 16 { // unsinged hack: source - 16 == target
+                if source == target + 16 {
+                    // unsinged hack: source - 16 == target
                     if target + 1 < 64 {
                         // check pawn lands next to enemy pawn
-                        match chess_board.mailbox[target + 1] {
+                        match chessboard.mailbox[target + 1] {
                             opt_cpt!(p) => {
                                 //check if pawn is not pinned
-                                if !chess_board.piece_is_pinned(target + 1) {
+                                if !chessboard.piece_is_pinned(target + 1) {
                                     enpassant_bb.data &= 1 << target + 8
                                 }
                             }
                             _______ => {}
                         }
                     }
-                    
-                    if 0 + 1 <= target { // unsigned hack: 0 <= target - 1
+
+                    if 0 + 1 <= target {
+                        // unsigned hack: 0 <= target - 1
                         // check pawn lands next to enemy pawn
-                        match chess_board.mailbox[target - 1] {
+                        match chessboard.mailbox[target - 1] {
                             opt_cpt!(p) => {
                                 //check if pawn is not pinned
-                                if !chess_board.piece_is_pinned(target - 1) {
+                                if !chessboard.piece_is_pinned(target - 1) {
                                     enpassant_bb.data &= 1 << target + 8
                                 }
                             }
@@ -996,289 +1109,290 @@ impl ChessBoard {
         // update piece_bbs and mailbox
         match chess_move.get_move_type() {
             MoveType::Normal => {
-                if let Some(source_data) = chess_board.mailbox[source] {
-                    //if source is a pawn and move is two-squares, encode enpassant data
-                    match chess_board.mailbox[source] {
-                        Some(cpt!(P)) => {
-                            if source + 16 == target {
-                                enpassant_bb.data |= 1 << (target - 8);
-                            }
-                        },
-                        Some(cpt!(p)) => {
-                            if source == target + 16 { //source - 16 == target
-                                enpassant_bb.data |= 1 << (target + 8);
-                            }
-                        },
-                        _____________ => {},
-                    }
-
-                    // set bit of source to zero
-                    chess_board.piece_bbs[cpt_index(source_data)].data &= !(1 << source);
-                    // set bit of target to one
-                    chess_board.piece_bbs[cpt_index(source_data)].data |=  (1 << target);
-
-                    // if target is occupied, deal with piece capture
-                    if let Some(target_data) = chess_board.mailbox[target] {
-                        chess_board.piece_bbs[cpt_index(target_data)].data &= !(1 << target);
-                        match target_data {
-                            // how to handle checks/king captures??
-                            /*cpt!(K) => {
-                                self.castle_bools[0] = false;
-                                self.castle_bools[1] = false;
-                            }*/
-                            cpt!(R) => {
-                                if source == 0 {
-                                    chess_board.castle_bools[0] = false;
-                                }
-                                else if source == 7 {
-                                    chess_board.castle_bools[1] = false
-                                }
-                            }
-                          
-                            cpt!(r) => {
-                                if source == 56 {
-                                    chess_board.castle_bools[2] = false;
-                                }
-                                else if source == 63 {
-                                    chess_board.castle_bools[3] = false
-                                }
-                            }
-                            _ => {}
+                // if source is a pawn and move is two-squares, encode enpassant data
+                match source_data {
+                    cpt!(P) => {
+                        if source + 16 == target {
+                            enpassant_bb.data |= 1 << (target - 8);
                         }
                     }
 
+                    cpt!(p) => {
+                        if source == target + 16 {
+                            //source - 16 == target
+                            enpassant_bb.data |= 1 << (target + 8);
+                        }
+                    }
 
-                    // set source mailbox to None
-                    chess_board.mailbox[source] = None;
-                    // set target mailbox to new ColouredPieceType
-                    chess_board.mailbox[target] = Some(source_data);
+                    _ => {}
                 }
-                else {
-                    panic!("update_state error: source mailbox is None!")
+
+                // update source bitboard
+                chessboard.piece_bbs[source_index].data &= !(1 << source);
+                chessboard.piece_bbs[source_index].data |= 1 << target;
+
+                // if target is occupied, deal with piece capture
+                if let Some(target_data) = chessboard.mailbox[target] {
+                    chessboard.piece_bbs[cpt_index(target_data)].data &= !(1 << target);
+                    match target_data {
+                        cpt!(R) => {
+                            if target == 0 {
+                                chessboard.castle_bools[0] = false;
+                            } else if target == 7 {
+                                chessboard.castle_bools[1] = false
+                            }
+                        }
+
+                        cpt!(r) => {
+                            if target == 56 {
+                                chessboard.castle_bools[2] = false;
+                            } else if target == 63 {
+                                chessboard.castle_bools[3] = false
+                            }
+                        }
+                        _ => {}
+                    }
                 }
+
+                // update mailbox
+                chessboard.mailbox[source] = None;
+                chessboard.mailbox[target] = Some(source_data);
             }
 
             MoveType::Castle => {
-                if let Some(data_source) = chess_board.mailbox[source] {
-                    // set bit of source to zero
-                    chess_board.piece_bbs[cpt_index(data_source)].data &= !(1 << source);
-                    // set bit of target to one
-                    chess_board.piece_bbs[cpt_index(data_source)].data |= (1 << target);
+                // update source bitboard
+                chessboard.piece_bbs[source_index].data &= !(1 << source);
+                chessboard.piece_bbs[source_index].data |= 1 << target;
 
-                    // set source mailbox to None
-                    chess_board.mailbox[source] = None;
-                    // set target mailbox to new ColouredPieceType
-                    chess_board.mailbox[target] = Some(data_source);
+                // update mailbox
+                chessboard.mailbox[source] = None;
+                chessboard.mailbox[target] = Some(source_data);
 
-                    // deal with rook movement
-                    match self.side_to_move {
-                        Side::White => {
-                            // king-side castle
-                            if target == 1 {
-                                // check if rook is present
-                                assert!(self.piece_bbs[04].data & 1 << 00 != 0);
-                                // ?? check if rook target square is empty
-                                // assert!(...)
-                                
-                                chess_board.piece_bbs[04].data &= !1 << 00;
-                                chess_board.piece_bbs[04].data |=  1 << 02;
-                                chess_board.mailbox[00] = None;
-                                chess_board.mailbox[02] = opt_cpt!(R)
-                            }
-                            // queen-side castle
-                            else if target == 5 {
-                                // check if rook is present
-                                assert!(self.piece_bbs[04].data & 1 << 07 != 0);
-                                // ?? check if rook target square is empty
-                                // assert!(...)
-
-                                chess_board.piece_bbs[04].data &= !1 << 07;
-                                chess_board.piece_bbs[04].data |=  1 << 04;
-                                chess_board.mailbox[04] = None;
-                                chess_board.mailbox[02] = opt_cpt!(R)
-                            }
-                        },
-                        Side::Black => {
-                            // king-side castle
-                            if target == 57 {
-                                // check if rook is present
-                                assert!(self.piece_bbs[10].data & 1 << 56 != 0);
-                                // ?? check if rook target square is empty
-                                // assert!(...)
-
-                                chess_board.piece_bbs[10].data &= !1 << 56;
-                                chess_board.piece_bbs[10].data |=  1 << 58;
-                                chess_board.mailbox[56] = None;
-                                chess_board.mailbox[58] = opt_cpt!(r)
-                            }
-                            // queen-side castle
-                            else if target == 61 {
-                                // check if rook is present
-                                assert!(self.piece_bbs[10].data & 1 << 63 != 0);
-                                // ?? check if rook target square is empty
-                                // assert!(...)
-
-                                chess_board.piece_bbs[10].data &= !1 << 63;
-                                chess_board.piece_bbs[10].data |=  1 << 60;
-                                chess_board.mailbox[56] = None;
-                                chess_board.mailbox[58] = opt_cpt!(r)
-                            }
-                        },
+                // deal with rook movement
+                match (self.side_to_move, target) {
+                    // white king-side castle
+                    (Side::White, 1) => {
+                        // check if rook is present
+                        assert!(self.piece_bbs[04].data & 1u64 << 00 != 0);
+                        chessboard.piece_bbs[04].data &= !(1u64 << 00);
+                        chessboard.piece_bbs[04].data |= 1u64 << 02;
+                        chessboard.mailbox[00] = None;
+                        chessboard.mailbox[02] = opt_cpt!(R);
                     }
-                }
-                else {
-                    panic!("update_state error: source mailbox is None!")
+
+                    // white queen-side castle
+                    (Side::White, 5) => {
+                        // check if rook is present
+                        assert!(self.piece_bbs[04].data & 1u64 << 07 != 0);
+                        chessboard.piece_bbs[04].data &= !(1u64 << 07);
+                        chessboard.piece_bbs[04].data |= 1u64 << 04;
+                        chessboard.mailbox[07] = None;
+                        chessboard.mailbox[04] = opt_cpt!(R)
+                    }
+
+                    // black king-side castle
+                    (Side::Black, 57) => {
+                        // check if rook is present
+                        assert!(self.piece_bbs[10].data & 1u64 << 56 != 0);
+                        chessboard.piece_bbs[10].data &= !(1u64 << 56);
+                        chessboard.piece_bbs[10].data |= 1u64 << 58;
+                        chessboard.mailbox[56] = None;
+                        chessboard.mailbox[58] = opt_cpt!(r)
+                    }
+
+                    (Side::Black, 61) => {
+                        // check if rook is present
+                        assert!(self.piece_bbs[10].data & 1u64 << 63 != 0);
+                        chessboard.piece_bbs[10].data &= !(1u64 << 63);
+                        chessboard.piece_bbs[10].data |= 1u64 << 60;
+                        chessboard.mailbox[63] = None;
+                        chessboard.mailbox[60] = opt_cpt!(r)
+                    }
+
+                    _ => panic!("update_state error: invalid castling target!"),
                 }
             }
 
             MoveType::EnPassant => {
-                // note: target is where the capturing pawn will end up
-                //       square is where the pawn to be captured is 
-                if let Some(data_source) = chess_board.mailbox[source] {
-                    // set bit of source to zero
-                    chess_board.piece_bbs[cpt_index(data_source)].data &= !(1 << source);
-                    // set bit of target to one
-                    chess_board.piece_bbs[cpt_index(data_source)].data |= 1 << target;
-                    let i = match self.side_to_move {
-                        Side::White => 11,
-                        Side::Black => 05,
-                    };
+                // note: target is where the capturing pawn will end up,
+                //       square is where the pawn to be captured is
 
-                    let square = match self.side_to_move {
-                        Side::White => target - 8,
-                        Side::Black => target + 8,
-                    };
-                    
-                    //check presence of pawn to be captured
-                    assert!(chess_board.piece_bbs[i].data & (1 << square) != 0);
+                // update source bitboard
+                chessboard.piece_bbs[cpt_index(source_data)].data &= !(1 << source);
+                chessboard.piece_bbs[cpt_index(source_data)].data |= 1 << target;
 
-                   
-                    // assert!(chess_board.mailbox[square] == Some(relevant_piece));
-                    if let Some(piece) = chess_board.mailbox[square] { //note: assert hack
-                        match self.side_to_move {
-                            Side::White => { match piece {
-                                cpt!(p) => {}, 
-                                _ => panic!("update_state error: square mailbox is not pawn, en_passant case!")
-                            }}
-                            Side::Black => { match piece {
-                                cpt!(P) => {},
-                                _ => panic!("update_state error: square mailbox is not pawn, en_passant case!")
-                            }}
-                        }
-                    } else {panic!("update_state error: square mailbox is None when move is an en_passant!")}
+                let index = match self.side_to_move {
+                    Side::White => 11usize,
+                    Side::Black => 05usize,
+                };
 
-                    // deal with piece capture
-                    if let Some(data_square) = chess_board.mailbox[square] {
-                        let j = cpt_index(data_square);
-                        chess_board.piece_bbs[j] =chess_board.piece_bbs[j].pop_bit(square);
+                let square = match self.side_to_move {
+                    Side::White => target - 8,
+                    Side::Black => target + 8,
+                };
+
+                // check presence of pawn to be captured
+                assert!(chessboard.piece_bbs[index].data & (1 << square) != 0);
+
+                // assert!(chessboard.mailbox[square] == Some(relevant_piece));
+                if let Some(piece) = chessboard.mailbox[square] {
+                    //note: assert hack
+                    match self.side_to_move {
+                        Side::White => match piece {
+                            cpt!(p) => {}
+                            _ => panic!(
+                                "update_state error: square mailbox is not pawn, en_passant case!"
+                            ),
+                        },
+                        Side::Black => match piece {
+                            cpt!(P) => {}
+                            _ => panic!(
+                                "update_state error: square mailbox is not pawn, en_passant case!"
+                            ),
+                        },
                     }
-                    else {
-                        panic!("update_state error: target mailbox is None when move is an en_passant!");
-                    }
+                } else {
+                    panic!("update_state error: en passant square mailbox is None!")
+                }
 
-                    // set source mailbox to None
-                    chess_board.mailbox[source] = None;
-                    // set target mailbox to new ColouredPieceType
-                    chess_board.mailbox[target] = Some(data_source);
-                    // set en_passant square mailbox to None
-                    chess_board.mailbox[square] = None;
-                }
-                else {
-                    panic!("update_state error: source mailbox is None!")
-                }
+                // deal with piece capture
+                let square_data = match chessboard.mailbox[square] {
+                    Some(x) => x,
+                    None => panic!("update_state error: en passant square mailbox is None!"),
+                };
+                let jndex = cpt_index(square_data);
+                chessboard.piece_bbs[jndex].data &= !(1u64 << square);
+
+                // update mailbox
+                chessboard.mailbox[source] = None;
+                chessboard.mailbox[target] = Some(source_data);
+                chessboard.mailbox[square] = None;
             }
 
             MoveType::Promotion => {
-                if let Some(data_source) = chess_board.mailbox[source] {
-                    // set bit of source to zero
-                    chess_board.piece_bbs[cpt_index(data_source)].data &= !(1 << source);
-                    
-                    if let Some(piece_type) = chess_move.get_piece_data() {
-                        let new_cpt = (data_source.0, piece_type);
-                        // set bit of target to one
-                        chess_board.piece_bbs[cpt_index(new_cpt)].data &= (1 << target);
-                        
-                        // if target is occupied, deal with piece capture
-                        if let Some(data_target) = chess_board.mailbox[target] {
-                            chess_board.piece_bbs[cpt_index(data_target)].data &= !(1 << target);
-                        }
-                        
-                        // set source mailbox to None
-                        chess_board.mailbox[source] = None;
-                        // set target mailbox to new ColouredPieceType
-                        chess_board.mailbox[target] = Some(new_cpt);
+                // set bit of source to zero
+                chessboard.piece_bbs[source_index].data &= !(1 << source);
 
-                    } else {panic!("update_state error: chess_move is a promotion with None piece data!");}
+                let promotion_piece = match chess_move.get_piece_data() {
+                    Some(x) => x,
+                    None => panic!(
+                        "update_state error: chess_move is a promotion with None piece data!"
+                    ),
+                };
+
+                let new_piece = (chessboard.side_to_move, promotion_piece);
+                let target_index = cpt_index(new_piece);
+
+                // update target bitboard
+                chessboard.piece_bbs[target_index].data |= 1 << target;
+
+                // if target is occupied, deal with piece capture
+                if let Some(data_target) = chessboard.mailbox[target] {
+                    chessboard.piece_bbs[cpt_index(data_target)].data &= !(1 << target);
                 }
-                else {panic!("update_state error: source mailbox is None!")}
+
+                // update mailbox
+                chessboard.mailbox[source] = None;
+                chessboard.mailbox[target] = Some(new_piece);
             }
         }
 
-        chess_board.enpassant_bb = enpassant_bb;
-        
-        //note: potential bug here
-        // check if king is in check in new state, return old position otherwise //old idea, its dead
-        // if chess_board.king_is_in_check(chess_board.side_to_move) {return self.const_clone()}
-
-        
-        match chess_board.side_to_move {
-            Side::Black => chess_board.full_move_counter += 1,
-            _ => {},
+        chessboard.enpassant_bb = enpassant_bb;
+        match chessboard.side_to_move {
+            Side::Black => chessboard.full_move_counter += 1,
+            _____ => {}
         }
-        chess_board.half_move_clock += 1;
-        chess_board.side_to_move = chess_board.side_to_move.update();
-        
+        chessboard.side_to_move = chessboard.side_to_move.update();
+        chessboard.half_move_clock += 1;
+
         // ['K','Q','N','B','R','P','k','q','n','b','r','p'];
         //check if move results in opponent's king to be in check
-        match chess_board.king_is_in_check(chess_board.side_to_move) {
+        match chessboard.king_is_in_check(chessboard.side_to_move) {
             true => {
-                let blockers = chess_board.blockers();
-                match chess_board.side_to_move {
+                match chessboard.side_to_move {
                     Side::White => {
-                        if let Some(king_pos) = chess_board.piece_bbs[0].lsb_index() {
+                        let blockers = chessboard.blockers();
+                        if let Some(king_pos) = chessboard.piece_bbs[0].lsb_index() {
                             let mut check_bitboard = BB::ZERO;
                             //q
-                            check_bitboard.data |= chess_board.piece_bbs[07].data & get_queen_attack(king_pos, blockers).data;
+                            check_bitboard.data |= chessboard.piece_bbs[07].data
+                                & get_queen_attack(king_pos, blockers).data;
                             //n
-                            check_bitboard.data |= chess_board.piece_bbs[08].data & KNIGHT_ATTACKS[king_pos].data;
+                            check_bitboard.data |=
+                                chessboard.piece_bbs[08].data & KNIGHT_ATTACKS[king_pos].data;
                             //b
-                            check_bitboard.data |= chess_board.piece_bbs[09].data & get_bishop_attack(king_pos, blockers).data;
+                            check_bitboard.data |= chessboard.piece_bbs[09].data
+                                & get_bishop_attack(king_pos, blockers).data;
                             //r
-                            check_bitboard.data |= chess_board.piece_bbs[10].data & get_rook_attack(king_pos, blockers).data;
+                            check_bitboard.data |= chessboard.piece_bbs[10].data
+                                & get_rook_attack(king_pos, blockers).data;
                             //p
-                            check_bitboard.data |= chess_board.piece_bbs[11].data & W_PAWN_ATTACKS[king_pos].data;
-                            chess_board.check_bb = check_bitboard;
-                        }
-                        else {
+                            check_bitboard.data |=
+                                chessboard.piece_bbs[11].data & W_PAWN_ATTACKS[king_pos].data;
+                            chessboard.check_bb = check_bitboard;
+                        } else {
                             panic!("update_state error: white king bitboard is empty!");
                         }
                     }
 
                     Side::Black => {
-                        if let Some(king_pos) = chess_board.piece_bbs[6].lsb_index() {
+                        let blockers = chessboard.blockers();
+                        if let Some(king_pos) = chessboard.piece_bbs[6].lsb_index() {
                             let mut check_bitboard = BB::ZERO;
                             //Q
-                            check_bitboard.data |= chess_board.piece_bbs[01].data & get_queen_attack(king_pos, blockers).data;
+                            check_bitboard.data |= chessboard.piece_bbs[01].data
+                                & get_queen_attack(king_pos, blockers).data;
                             //N
-                            check_bitboard.data |= chess_board.piece_bbs[02].data & KNIGHT_ATTACKS[king_pos].data;
+                            check_bitboard.data |=
+                                chessboard.piece_bbs[02].data & KNIGHT_ATTACKS[king_pos].data;
                             //B
-                            check_bitboard.data |= chess_board.piece_bbs[03].data & get_bishop_attack(king_pos, blockers).data;
+                            check_bitboard.data |= chessboard.piece_bbs[03].data
+                                & get_bishop_attack(king_pos, blockers).data;
                             //R
-                            check_bitboard.data |= chess_board.piece_bbs[04].data & get_rook_attack(king_pos, blockers).data;
+                            check_bitboard.data |= chessboard.piece_bbs[04].data
+                                & get_rook_attack(king_pos, blockers).data;
                             //P
-                            check_bitboard.data |= chess_board.piece_bbs[05].data & B_PAWN_ATTACKS[king_pos].data;
-                            chess_board.check_bb = check_bitboard;
-                        }
-                        else {
+                            check_bitboard.data |=
+                                chessboard.piece_bbs[05].data & B_PAWN_ATTACKS[king_pos].data;
+                            chessboard.check_bb = check_bitboard;
+                        } else {
                             panic!("update_state error: black king bitboard is empty!");
                         }
                     }
                 }
             }
             false => {
-                chess_board.check_bb = BB::ZERO;
+                chessboard.check_bb = BB::ZERO;
             }
         }
-        return chess_board;
+        return chessboard;
     }
+}
+
+pub fn print_mailbox(mailbox: [CPT; 64]) -> String {
+    let mut s = String::new();
+    // append characters according to piece
+    for i in 1..=64usize {
+        let c = match mailbox[64 - i] {
+            opt_cpt!(K) => UNICODE_SYM[00],
+            opt_cpt!(Q) => UNICODE_SYM[01],
+            opt_cpt!(N) => UNICODE_SYM[02],
+            opt_cpt!(B) => UNICODE_SYM[03],
+            opt_cpt!(R) => UNICODE_SYM[04],
+            opt_cpt!(P) => UNICODE_SYM[05],
+            opt_cpt!(k) => UNICODE_SYM[06],
+            opt_cpt!(q) => UNICODE_SYM[07],
+            opt_cpt!(n) => UNICODE_SYM[08],
+            opt_cpt!(b) => UNICODE_SYM[09],
+            opt_cpt!(r) => UNICODE_SYM[10],
+            opt_cpt!(p) => UNICODE_SYM[11],
+            opt_cpt!(_) => '.',
+        };
+        s.push(c);
+        if i % 8 == 0 {
+            s.push('\n');
+        }
+    }
+
+    s
 }

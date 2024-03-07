@@ -113,7 +113,7 @@ impl ChessMove {
     }
     pub const fn piece(&self) -> Option<PieceType> {
         if let MoveType::Promotion = self.get_move_type() {
-            match ((self.data & 0b11_00_000000_000000) as usize) >> 12 {
+            match ((self.data & 0b11_000000_000000u16) as usize) >> 12 {
                 0b00 => Some(PieceType::Knight),
                 0b01 => Some(PieceType::Bishop),
                 0b10 => Some(PieceType::Rook),
@@ -235,8 +235,8 @@ impl ChessMove {
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct MovesArray {
-    data: [Option<ChessMove>; 256], //note: possible moves in any given position is less than 256
-    count: usize,
+    pub data: [Option<ChessMove>; 256], //note: possible moves in any given position is less than 256
+    pub count: usize,
 }
 
 impl MovesArray {
