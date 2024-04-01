@@ -203,13 +203,34 @@ const TEST_FEN2: &str = "4k3/pppppppp/8/8/8/8/PPPPPPPP/4K3 w - - 0 1";
 
 pub fn uci_loop(chessboard: &mut ChessBoard) -> io::Result<()> {
     let mut reader = BufReader::new(io::stdin());
-
-    let mut ongoing = true; //useless?
     let mut buffer = String::with_capacity(1 << 11);
+    while let Ok(count) = reader.read_line(&mut buffer) {
+        if count == 0 {
+            return Ok(());
+        }
 
-    while ongoing {
-        //io.
+        let mut cmds = buffer.split_whitespace();
+        match cmds.next() {
+            Some("isready") => println!("readyok"),
+            Some("position") => {
+                chessboard.parse_uci_position_cmd(cmds.collect::<Vec<&str>>().join(" ").as_str())
+            }
+            Some("ucinewgame") => println!("{}", chessboard.parse_uci_go_cmd("startpos")),
+            Some("go") => println!(
+                "{}",
+                chessboard.parse_uci_go_cmd(cmds.collect::<Vec<&str>>().join(" ").as_str())
+            ),
+            Some("quit") => return Ok(()),
+            Some("uci") => {
+                // print engine info
+                println!("id name ENGINE");
+                println!("id name AUTHOR");
+                println!("uciok");
+            }
+            _ => {} //???
+        }
     }
+
     return Ok(());
 }
 
@@ -217,8 +238,8 @@ pub fn old_uci_loop(chessboard: &mut ChessBoard) -> io::Result<()> {
     let mut reader = BufReader::new(io::stdin());
 
     // print engine info
-    println!("id name ENGINE");
-    println!("id name AUTHOR");
+    println!("id name Stowockfish/PawnPusher");
+    println!("id name Fangs");
     println!("uciok");
 
     let mut ongoing = true;
