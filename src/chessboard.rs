@@ -265,16 +265,10 @@ type OCM = Option<ChessMove>;
 
 impl ChessBoard {
     pub const fn search(&self, depth: usize) -> ChessMove {
-        if let (_, Some(x)) = self.negamax(isize::MIN + 1, isize::MAX - 1, depth) {
-            return x;
-        } else {
-            panic!("search error: no legal move!")
+        match self.negamax(isize::MIN + 1, isize::MAX - 1, depth).1 {
+            Some(x) => x,
+            None => panic!("search error: no legal move!"),
         }
-    }
-
-    const fn negamax_neg(&self, alpha: isize, beta: isize, depth: usize) -> (isize, OCM) {
-        let (x, y) = self.negamax(alpha, beta, depth);
-        return (-x, y);
     }
 
     const fn negamax(&self, alpha: isize, beta: isize, depth: usize) -> (isize, OCM) {
@@ -285,13 +279,62 @@ impl ChessBoard {
             };
         }
 
+        let moves_array = self.generate_moves();
+        //sort moves_array here
+
+        if moves_array.len() == 0 && self.king_is_in_check(self.side_to_move) {
+            return (((isize::MIN + 1) / 2) - (depth as isize), None);
+        }
+        let mut alpha = alpha;
+        let mut value: isize = isize::MIN + 1;
+        let mut i: usize = 0;
+        let mut best_move: Option<ChessMove> = None;
+        while i < moves_array.len() {
+            let chess_move = match moves_array.data[i] {
+                Some(x) => x,
+                None => unreachable!(),
+            };
+            let chessboard = self.update_state(chess_move);
+            let new_value = -chessboard.negamax(-beta, -alpha, depth - 1).0;
+            // value = max(value, new_value)
+            if new_value > value {
+                value = new_value;
+            }
+            // alpha = max(alpha, value)
+            if value > alpha {
+                alpha = value;
+                best_move = Some(chess_move);
+            }
+
+            // cutoff
+            if alpha >= beta {
+                break;
+            }
+            i += 1;
+        }
+        (value, best_move)
+    }
+
+    const fn old_negamax_neg(&self, alpha: isize, beta: isize, depth: usize) -> (isize, OCM) {
+        let (x, y) = self.old_negamax(alpha, beta, depth);
+        return (-x, y);
+    }
+
+    const fn old_negamax(&self, alpha: isize, beta: isize, depth: usize) -> (isize, OCM) {
+        if depth == 0 {
+            return match self.side_to_move {
+                Side::White => (self.naive_eval(), None),
+                Side::Black => (self.naive_eval(), None),
+            };
+        }
+
         let mut value: isize = isize::MIN + 1;
         let moves_array = self.generate_moves();
 
         if moves_array.len() == 0 {
             let side = self.side_to_move;
             if self.king_is_in_check(side) {
-                return ((isize::MIN + 1) / (2 - (depth as isize)), None);
+                return (((isize::MIN + 1) / 2) - (depth as isize), None);
             }
             return (0, None);
         }
@@ -314,7 +357,7 @@ impl ChessBoard {
                 //    Side::White => todo!(),
                 //    Side::Black => todo!(),
                 //},
-                _ => chessboard.negamax_neg(-beta, -alpha, depth - 1),
+                _ => chessboard.old_negamax_neg(-beta, -alpha, depth - 1),
             };
             let new_value = -new_value;
             // value = max(value, new_value)
@@ -359,11 +402,7 @@ impl ChessBoard {
             };
             i += 1;
         }
-
-        match self.side_to_move {
-            Side::White => score,
-            Side::Black => -score,
-        }
+        score
     }
 
     pub fn from_fen(input: &str) -> ChessBoard {
@@ -1786,8 +1825,16 @@ impl ChessBoard {
     }
 
     pub fn parse_uci_position_cmd(&mut self, cmd_str: &str) {
+        //shitty debug flat
+        //if true {
+        //    println!("cmd_str:{}", cmd_str);
+        //}
         let mut cmds = cmd_str.split(' ');
         while let Some(cmd) = cmds.next() {
+            //shitty debug flat
+            //if true {
+            //    println!("processing cmd:{}", cmd);
+            //};
             // UCI command - startpos
             if cmd == "startpos" {
                 *self = ChessBoard::default();
@@ -1806,6 +1853,7 @@ impl ChessBoard {
                 continue;
             }
             // UCI command - moves
+            //else if cmd == "MOVES" || cmd == "moves" {
             else {
                 let moves_arr = self.generate_moves();
                 let mut i: usize = 0;
@@ -1814,7 +1862,7 @@ impl ChessBoard {
                     if format!("{}", chess_move) == cmd {
                         //todo: maybe parse into a source/target and do int compare
                         *self = self.update_state(chess_move);
-                        break;
+                        //break;
                     }
                     i += 1;
                 }
